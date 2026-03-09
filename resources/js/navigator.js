@@ -1060,11 +1060,19 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         var personCardRect = personCard.getBoundingClientRect();
         // Person's right edge X coordinate
         var personRightX = layout.x + (personCardRect.right - wrapperRect.left) / this.zoomLevel;
-        // Connector Y (same for all spouses = calculated center)
-        var connectorY = this.getPersonCenterY(layout);
+        
+        // Stagger divorce connectors vertically - each spouse at different Y level
+        // Spread up to 5 spouses across ~30px vertical range (±15px from center)
+        var familyCount = coupleLines.length;
+        var verticalSpacing = familyCount > 1 ? 8 : 0;  // pixels between each spouse connector
+        var centerY = this.getPersonCenterY(layout);
         
         // Draw connector for each family (person to each spouse)
         for (var fi = 0; fi < coupleLines.length; fi++) {
+            // Stagger Y position: center ± offset based on family index
+            var offset = (fi - (familyCount - 1) / 2) * verticalSpacing;
+            var connectorY = centerY + offset;
+            
             // Spouse card is at allCards index (fi + 1)
             var spouseCard = allCards[fi + 1];
             if (!spouseCard) continue;
@@ -1073,9 +1081,19 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             // Spouse's left edge X coordinate
             var spouseLeftX = layout.x + (spouseCardRect.left - wrapperRect.left) / this.zoomLevel;
             
+            // Draw connector with smooth curve at person card edge
+            var cornerR = 4;
             ctx.beginPath();
             ctx.moveTo(personRightX, connectorY);
-            ctx.lineTo(spouseLeftX, connectorY);
+            if (Math.abs(spouseLeftX - personRightX) > cornerR * 3) {
+                // Room for rounded corners - use curves
+                ctx.quadraticCurveTo(personRightX + cornerR, connectorY, personRightX + cornerR, connectorY);
+                ctx.lineTo(spouseLeftX - cornerR, connectorY);
+                ctx.quadraticCurveTo(spouseLeftX, connectorY, spouseLeftX, connectorY);
+            } else {
+                // Tight space - straight line
+                ctx.lineTo(spouseLeftX, connectorY);
+            }
             ctx.stroke();
             
             // Draw anchor dots at both ends
@@ -1317,29 +1335,41 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
     if (srcX < minX) minX = srcX;
     if (srcX > maxX) maxX = srcX;
 
-    // Draw entire fork as ONE path so lineJoin rounds all junctions
-    // Trunk down + bar across + drops down
+    // Trunk with rounded corner to bar
+    var cornerR = Math.min(R, 4);
     ctx.beginPath();
-    
-    // Start at source and go down to bar
     ctx.moveTo(srcX, srcY);
-    ctx.lineTo(srcX, barY);
-    
-    // Horizontal bar across
-    ctx.lineTo(minX, barY);
-    ctx.lineTo(maxX, barY);
-    
-    // Move back to bar center, then draw drops individually
+    if (barY - srcY > cornerR * 2) {
+        ctx.lineTo(srcX, barY - cornerR);
+        ctx.quadraticCurveTo(srcX, barY, srcX, barY);  // Curve at junction
+    } else {
+        ctx.lineTo(srcX, barY);
+    }
     ctx.stroke();
 
-    // Individual drops to each child (straight vertical)
+    // Horizontal fork bar
+    ctx.beginPath();
+    ctx.moveTo(minX, barY);
+    ctx.lineTo(maxX, barY);
+    ctx.stroke();
+
+    // Individual drops to each child with rounded corners at bar junction
     for (var i = 0; i < targets.length; i++) {
         var tx = targets[i].x;
         var ty = targets[i].y;
+        var dropH = ty - barY;
 
         ctx.beginPath();
         ctx.moveTo(tx, barY);
-        ctx.lineTo(tx, ty);
+        if (dropH > cornerR * 2) {
+            // Smooth rounded corner from bar downward
+            ctx.lineTo(tx, barY + cornerR);
+            ctx.quadraticCurveTo(tx, barY, tx, barY + cornerR);
+            ctx.lineTo(tx, ty);
+        } else {
+            // Tight space - straight drop
+            ctx.lineTo(tx, ty);
+        }
         ctx.stroke();
 
         drawDot(tx, ty);
