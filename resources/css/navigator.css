@@ -277,6 +277,14 @@
     padding: 2px 4px;
 }
 
+.sp-couple-line-divorced {
+    min-width: 88px;
+    min-height: 94px;
+    justify-content: space-between;
+    padding: 4px 6px;
+    gap: 4px;
+}
+
 /* Horizontal connector line behind the rings area */
 .sp-couple-line::before {
     content: '';
@@ -322,14 +330,24 @@
     line-height: 1;
     z-index: 1;
     position: relative;
+    max-width: 78px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 4px;
+    padding: 1px 3px;
 }
 
 .sp-divorce-date {
     color: #e74c3c;
 }
 
-.sp-couple-line-divorced {
-    gap: 0;
+.sp-couple-date-top {
+    align-self: center;
+}
+
+.sp-couple-date-bottom {
+    align-self: center;
 }
 
 /* Staggered positioning for additional marriages — shift down */

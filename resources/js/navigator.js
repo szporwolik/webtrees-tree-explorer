@@ -813,24 +813,34 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
     var isMarried = familyData.married;
 
     if (isDivorced) {
-        // Divorced layout: marriage date / broken rings / divorce date
+        // Divorced layout: top date / broken rings / bottom date.
+        // Use explicit positions so long localized dates do not collide with connectors.
+        lineEl.classList.add('sp-couple-line-divorced');
+        lineEl.title = [
+            familyData.marriageDate ? ('Marriage: ' + familyData.marriageDate) : '',
+            familyData.divorceDate ? ('Divorce: ' + familyData.divorceDate) : ''
+        ].filter(Boolean).join(' | ');
+
         if (familyData.marriageDate) {
             var mDate = document.createElement('span');
-            mDate.className = 'sp-couple-date';
+            mDate.className = 'sp-couple-date sp-couple-date-top';
             mDate.textContent = familyData.marriageDate;
+            mDate.title = familyData.marriageDate;
             lineEl.appendChild(mDate);
         }
+
         var brokenRings = document.createElement('span');
         brokenRings.className = 'sp-couple-rings sp-rings-broken';
         brokenRings.innerHTML = '<svg viewBox="0 0 24 14" width="20" height="12"><circle cx="8" cy="7" r="5" fill="none" stroke="#ccc" stroke-width="1.5"/><circle cx="16" cy="7" r="5" fill="none" stroke="#ccc" stroke-width="1.5"/><line x1="4" y1="2" x2="20" y2="12" stroke="#e74c3c" stroke-width="1.5"/></svg>';
         lineEl.appendChild(brokenRings);
+
         if (familyData.divorceDate) {
             var dDate = document.createElement('span');
-            dDate.className = 'sp-couple-date sp-divorce-date';
+            dDate.className = 'sp-couple-date sp-divorce-date sp-couple-date-bottom';
             dDate.textContent = familyData.divorceDate;
+            dDate.title = familyData.divorceDate;
             lineEl.appendChild(dDate);
         }
-        lineEl.classList.add('sp-couple-line-divorced');
     } else if (isMarried) {
         // Married layout: rings + optional date
         var rings = document.createElement('span');
