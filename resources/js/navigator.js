@@ -1113,8 +1113,18 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         }
 
         // Helper: find bottom Y of card for connector source
-        // Use CALCULATED Y position (ensures same-generation alignment)
+        // Use DOM measurement to correctly get couple-line bottom position
         function coupleLineBottomY(nodeId, layout, fi) {
+            var wrapper = self.cardElements[nodeId];
+            if (wrapper) {
+                var lines = wrapper.querySelectorAll('.sp-couple-line');
+                if (lines[fi]) {
+                    var wRect = wrapper.getBoundingClientRect();
+                    var lineRect = lines[fi].getBoundingClientRect();
+                    return layout.y + ((lineRect.bottom - wRect.top) / self.zoomLevel);
+                }
+            }
+            // Fallback to measured card height
             return self.getPersonBottomY(layout);
         }
 
@@ -1319,7 +1329,7 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
     ctx.lineTo(maxX, barY);
     ctx.stroke();
 
-    // Individual drops to each child (straight vertical lines)
+    // Individual drops to each child (straight vertical with rounded line joins)
     for (var i = 0; i < targets.length; i++) {
         var tx = targets[i].x;
         var ty = targets[i].y;
