@@ -1317,19 +1317,22 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
     if (srcX < minX) minX = srcX;
     if (srcX > maxX) maxX = srcX;
 
-    // Shared vertical trunk from source to bar
+    // Draw entire fork as ONE path so lineJoin rounds all junctions
+    // Trunk down + bar across + drops down
     ctx.beginPath();
+    
+    // Start at source and go down to bar
     ctx.moveTo(srcX, srcY);
     ctx.lineTo(srcX, barY);
-    ctx.stroke();
-
-    // Shared horizontal fork bar (continuous; no segmentation gaps).
-    ctx.beginPath();
-    ctx.moveTo(minX, barY);
+    
+    // Horizontal bar across
+    ctx.lineTo(minX, barY);
     ctx.lineTo(maxX, barY);
+    
+    // Move back to bar center, then draw drops individually
     ctx.stroke();
 
-    // Individual drops to each child (straight vertical with rounded line joins)
+    // Individual drops to each child (straight vertical)
     for (var i = 0; i < targets.length; i++) {
         var tx = targets[i].x;
         var ty = targets[i].y;
