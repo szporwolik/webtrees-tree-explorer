@@ -1265,35 +1265,36 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
         return;
     }
 
-    // Multiple children — full fork with rounded corners
+    // Multiple children — draw one shared fork (trunk + bar + drops).
+    // This avoids re-drawing overlapping paths for each child, which can
+    // look like "spaghetti" on dense trees with multiple families.
     targets.sort(function (a, b) { return a.x - b.x; });
+    var minX = targets[0].x;
+    var maxX = targets[targets.length - 1].x;
 
-    // Draw each branch with rounded corners
+    // Ensure horizontal bar always intersects the source trunk.
+    if (srcX < minX) minX = srcX;
+    if (srcX > maxX) maxX = srcX;
+
+    // Shared vertical trunk from source to bar
+    ctx.beginPath();
+    ctx.moveTo(srcX, srcY);
+    ctx.lineTo(srcX, barY);
+    ctx.stroke();
+
+    // Shared horizontal fork bar
+    ctx.beginPath();
+    ctx.moveTo(minX, barY);
+    ctx.lineTo(maxX, barY);
+    ctx.stroke();
+
+    // Individual drops to each child
     for (var i = 0; i < targets.length; i++) {
         var tx = targets[i].x;
         var ty = targets[i].y;
-        var r = Math.min(R, Math.abs(tx - srcX) / 2, Math.abs(barY - srcY), Math.abs(ty - barY));
-        if (r < 1) r = 0;
-
         ctx.beginPath();
-        ctx.moveTo(srcX, srcY);
-
-        if (Math.abs(tx - srcX) < 2) {
-            // Child directly below source — straight line
-            ctx.lineTo(srcX, ty);
-        } else {
-            // Child offset — L-shape with rounded corners
-            var dir = tx > srcX ? 1 : -1;
-            ctx.lineTo(srcX, barY - r);
-            if (r > 0) {
-                ctx.quadraticCurveTo(srcX, barY, srcX + dir * r, barY);
-            }
-            ctx.lineTo(tx - dir * r, barY);
-            if (r > 0) {
-                ctx.quadraticCurveTo(tx, barY, tx, barY + r);
-            }
-            ctx.lineTo(tx, ty);
-        }
+        ctx.moveTo(tx, barY);
+        ctx.lineTo(tx, ty);
         ctx.stroke();
         drawDot(tx, ty);
     }
