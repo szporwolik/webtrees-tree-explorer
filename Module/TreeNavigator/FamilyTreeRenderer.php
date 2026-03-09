@@ -1,0 +1,887 @@
+<?php
+
+/**
+ * SP Tree Explorer for webtrees
+ * Family tree rendering engine — JSON data provider
+ * Copyright (C) 2025-2026 Szymon Porwolik
+ */
+
+declare(strict_types=1);
+
+namespace SpTreeExplorer\FamilyNav\Module;
+
+use Fisharebest\Webtrees\Auth;
+use Fisharebest\Webtrees\DB;
+use Fisharebest\Webtrees\Registry;
+use Fisharebest\Webtrees\Family;
+use Fisharebest\Webtrees\Gedcom;
+use Fisharebest\Webtrees\I18N;
+use Fisharebest\Webtrees\Individual;
+use Fisharebest\Webtrees\Http\RequestHandlers\AddNewFact;
+use Fisharebest\Webtrees\Session;
+use Fisharebest\Webtrees\Tree;
+use Illuminate\Support\Collection;
+
+use SpTreeExplorer\FamilyNav\SpTreeExplorerHandler;
+
+/**
+ * Class FamilyTreeRenderer — generates JSON tree data for the JS layout engine.
+ *
+ * Output format: an array of "node" objects, each describing one person
+ * and their edges (parent/child/spouse). The JS client is responsible for
+ * layout, card rendering, and connector drawing.
+ */
+class FamilyTreeRenderer
+{
+    private string $prefix;
+    private string $moduleName;
+    private Tree $tree;
+    private string $rootXref;
+    private int $nodeSeq;
+    private string $jsHandle = 'spNav';
+
+    /** @var array<string, bool> Tracks visited xrefs to avoid cycles */
+    private array $visited = [];
+
+    /** @var array<string, array> Collected nodes keyed by unique id */
+    private array $nodes = [];
+
+    /** @var array<array> Collected edges */
+    private array $edges = [];
+
+    /** @var int Unique node id counter */
+    private int $nodeIdCounter = 0;
+
+    public function __construct(string $prefix, string $moduleName, Tree $tree, string $rootXref)
+    {
+        $this->prefix     = $prefix;
+        $this->moduleName = $moduleName;
+        $this->tree       = $tree;
+        $this->rootXref   = $rootXref;
+        $this->nodeSeq    = 0;
+    }
+
+    /**
+     * Initialize session tracking for visited nodes.
+     */
+    public function prepare(): void
+    {
+        $tName = $this->tree->name();
+        $visited = [];
+        $visited[$tName] = [];
+        $visited[$tName][$this->rootXref] = [];
+        Session::put('SPNav_visited', $visited);
+    }
+
+    /**
+     * Restore session state for AJAX continuation.
+     */
+    public function restore(): void
+    {
+        $visited = Session::get('SPNav_visited', []);
+        $tName = $this->tree->name();
+        $this->nodeSeq = (int) ($visited[$tName][$this->rootXref]['_seq_'] ?? 0);
+        $this->nodeIdCounter = (int) ($visited[$tName][$this->rootXref]['_nodeIdCounter_'] ?? 0);
+    }
+
+    private function markVisited(string $xref): int
+    {
+        $visited = Session::get('SPNav_visited', []);
+        $tName = $this->tree->name();
+        $root = $this->rootXref;
+
+        $count = $visited[$tName][$root][$xref] ?? -1;
+        $visited[$tName][$root][$xref] = $count + 1;
+        $visited[$tName][$root]['_seq_'] = $this->nodeSeq;
+        $visited[$tName][$root]['_nodeIdCounter_'] = $this->nodeIdCounter;
+        Session::put('SPNav_visited', $visited);
+
+        return $count + 1;
+    }
+
+    private function nextNodeId(): string
+    {
+        return 'n' . ($this->nodeIdCounter++);
+    }
+
+    private function saveNodeIdCounter(): void
+    {
+        $visited = Session::get('SPNav_visited', []);
+        $tName = $this->tree->name();
+        $visited[$tName][$this->rootXref]['_nodeIdCounter_'] = $this->nodeIdCounter;
+        Session::put('SPNav_visited', $visited);
+    }
+
+    /**
+     * Build the full viewport: outer chrome + JSON data for JS.
+     *
+     * @return string[] [html, js_init_code]
+     */
+    public function buildViewport(Individual $person, int $depth, bool $expanded): array
+    {
+        $cardName = $this->prefix . 'D';
+        $this->prefix = $cardName;
+
+        // Build JSON tree data
+        $this->nodes = [];
+        $this->edges = [];
+        $this->visited = [];
+        $this->collectTree($person, $depth, 0, null, true, '');
+
+        // Save nodeIdCounter to session so AJAX expansions continue from here
+        $this->saveNodeIdCounter();
+
+        $treeData = json_encode([
+            'nodes' => array_values($this->nodes),
+            'edges' => $this->edges,
+            'rootId' => 'n0',
+        ], JSON_UNESCAPED_UNICODE);
+
+        $expandUrl = route(SpTreeExplorerHandler::class, [
+            'module'   => $this->moduleName,
+            'action'   => 'NodeExpand',
+            'tree'     => $this->tree->name(),
+            'rootXref' => $this->rootXref,
+        ]);
+
+        $searchUrl = route(SpTreeExplorerHandler::class, [
+            'module'   => $this->moduleName,
+            'action'   => 'PersonSearch',
+            'tree'     => $this->tree->name(),
+            'rootXref' => $this->rootXref,
+        ]);
+
+        $html = view('modules/spNavigator/viewport', [
+            'module'      => $this->moduleName,
+            'prefix'      => $cardName,
+            'rootXref'    => $this->rootXref,
+            'tree'        => $this->tree,
+            'expandUrl'   => $expandUrl,
+            'searchUrl'   => $searchUrl,
+        ]);
+
+        $isExpanded = $expanded ? 'true' : 'false';
+        $jsExpandUrl = addcslashes($expandUrl, "'\\");
+        $jsSearchUrl = addcslashes($searchUrl, "'\\");
+        $jsInit = 'var ' . $this->jsHandle . 'Controller = new FamilyNavigator("'
+            . $cardName . '", ' . $isExpanded . ', '
+            . $treeData . ', "'
+            . $jsExpandUrl . '", "'
+            . $jsSearchUrl . '");';
+
+        return [$html, $jsInit];
+    }
+
+    /**
+     * Build a person's JSON data.
+     */
+    private function buildPersonData(Individual $person, bool $isOrigin = false): array
+    {
+        $thumbUrl = '';
+        try {
+            $imgTag = $person->displayImage(80, 80, 'contain', []);
+            if (preg_match('/src=["\']([^"\']+)["\']/', $imgTag, $m)) {
+                $thumbUrl = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+            }
+        } catch (\Throwable $e) {
+            // No image available
+        }
+
+        return [
+            'xref'     => $person->xref(),
+            'name'     => strip_tags($person->fullName()),
+            'nameHtml' => $person->fullName(),
+            'years'    => $person->lifespan(),
+            'sex'      => $person->sex(),
+            'url'      => $person->url(),
+            'addMediaUrl' => route(AddNewFact::class, [
+                'tree' => $this->tree->name(),
+                'xref' => $person->xref(),
+                'fact' => 'OBJE',
+            ]),
+            'thumb'    => $thumbUrl,
+            'isDead'   => $person->isDead(),
+            'isOrigin' => $isOrigin,
+        ];
+    }
+
+    /**
+     * Build data for an unknown/placeholder person.
+     */
+    private function buildUnknownPersonData(string $sex): array
+    {
+        return [
+            'xref'        => null,
+            'name'        => '?',
+            'nameHtml'    => '?',
+            'years'       => '',
+            'sex'         => $sex,
+            'url'         => '',
+            'addMediaUrl' => '',
+            'thumb'       => null,
+            'isDead'      => false,
+            'isOrigin'    => false,
+            'isUnknown'   => true,
+        ];
+    }
+
+    /**
+     * Find the best parent family for an individual.
+     * Prefers families with real parents, then families with siblings, skips empty ones.
+     */
+    private function bestParentFamily(Individual $person): ?Family
+    {
+        $withSiblings = null;
+        foreach ($person->childFamilies() as $fam) {
+            if (($fam->husband() instanceof Individual) || ($fam->wife() instanceof Individual)) {
+                return $fam; // Has real parents — best choice
+            }
+            if ($withSiblings === null) {
+                foreach ($fam->children() as $ch) {
+                    if ($ch->xref() !== $person->xref()) {
+                        $withSiblings = $fam;
+                        break;
+                    }
+                }
+            }
+        }
+        return $withSiblings;
+    }
+
+    /**
+     * Recursively collect nodes and edges for the tree.
+     *
+     * direction:  0 = origin (show both up & down)
+     *             1 = ancestor direction (only up + siblings of path child)
+     *            -1 = descendant direction (only down)
+     *
+     * @return string The node ID assigned to this person's "couple node"
+     */
+    private function collectTree(Individual $person, int $depth, int $direction,
+                                 ?Family $throughFamily, bool $isOrigin,
+                                 string $pathChildXref, int $descDepth = -1): string
+    {
+        $xref = $person->xref();
+
+        // Capture birth date and original xref before any gender swap
+        $childBirthJd = $person->getBirthDate()->julianDay();
+        $originalChildXref = $xref;
+
+        // Cycle guard
+        $visitKey = $xref . ':' . $direction;
+        if (isset($this->visited[$visitKey])) {
+            $nodeId = $this->nextNodeId();
+            $personData = $this->buildPersonData($person, $isOrigin);
+            $this->nodes[$nodeId] = [
+                'id'        => $nodeId,
+                'type'      => 'couple',
+                'person'    => $personData,
+                'families'  => [],
+                'isOrigin'  => false,
+                'direction' => $direction,
+                'hasMultipleAncestorLines' => false,
+                'ancestorLines' => [],
+                'activeAncestorLine' => 0,
+                'personHasParents' => false,
+                'childBirthJd' => $childBirthJd,
+                'originalChildXref' => $originalChildXref,
+            ];
+            return $nodeId;
+        }
+        $this->visited[$visitKey] = true;
+
+        $this->markVisited($xref);
+
+        $nodeId = $this->nextNodeId();
+        $personData = $this->buildPersonData($person, $isOrigin);
+
+        // --- Build families array ---
+        // Collect all (or filtered) spouse families
+        $allSpouseFamilies = $person->spouseFamilies()->toArray();
+        usort($allSpouseFamilies, [$this, 'compareByMarriageDate']);
+
+        // In ancestor direction, show all families but track which one is the "through" family
+        $throughFamilyXref = ($throughFamily instanceof Family) ? $throughFamily->xref() : null;
+
+        $families = [];
+        $familyObjects = [];
+        $genderSwapped = false;
+
+        foreach ($allSpouseFamilies as $spouseFamily) {
+            $spouse = $spouseFamily->spouse($person);
+            $spouseData = null;
+            $divorced = false;
+            $married = false;
+            $marriageDate = '';
+            $divorceDate = '';
+            $familyUrl = $spouseFamily->url();
+            $spouseHasParents = false;
+
+            if ($spouse instanceof Individual) {
+                foreach ($spouseFamily->facts(Gedcom::MARRIAGE_EVENTS, true) as $fact) {
+                    if ($fact->tag() === 'FAM:MARR') {
+                        $married = true;
+                    }
+                    $mDate = $fact->date();
+                    if ($mDate->isOK()) {
+                        $marriageDate = strip_tags($mDate->display());
+                    }
+                }
+                foreach ($spouseFamily->facts(Gedcom::DIVORCE_EVENTS, true) as $fact) {
+                    $divorced = true;
+                    $dDate = $fact->date();
+                    if ($dDate->isOK()) {
+                        $divorceDate = strip_tags($dDate->display());
+                    }
+                }
+                $spouseData = $this->buildPersonData($spouse);
+                $spouseData['divorced'] = $divorced;
+
+                // Gender swap: only when single family (ancestor direction)
+                if (count($allSpouseFamilies) === 1 && $person->sex() === 'F' && $spouse->sex() === 'M') {
+                    $tmp = $personData;
+                    $personData = $spouseData;
+                    $spouseData = $tmp;
+                    $tmpIndiv = $person;
+                    $person = $spouse;
+                    $spouse = $tmpIndiv;
+                    $xref = $person->xref();
+                    $genderSwapped = true;
+                }
+
+                $spParentFam = $this->bestParentFamily($spouse);
+                if ($spParentFam instanceof Family) {
+                    $spHasReal = ($spParentFam->husband() instanceof Individual)
+                              || ($spParentFam->wife() instanceof Individual);
+                    if ($spHasReal) {
+                        $spouseHasParents = true;
+                    } else {
+                        // No real parents but check for siblings → unknown parent boxes
+                        foreach ($spParentFam->children() as $ch) {
+                            if ($ch->xref() !== $spouse->xref()) {
+                                $spouseHasParents = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            $families[] = [
+                'spouse'       => $spouseData,
+                'marriageDate' => $marriageDate,
+                'married'      => $married,
+                'divorced'     => $divorced,
+                'divorceDate'  => $divorceDate,
+                'familyUrl'    => $familyUrl,
+                'familyXref'   => $spouseFamily->xref(),
+                'spouseHasParents' => $spouseHasParents,
+            ];
+            $familyObjects[] = $spouseFamily;
+        }
+
+        // --- Ancestor lines ---
+        $personHasParents = false;
+        $ancestorLines = [];
+        $parentFamily = $this->bestParentFamily($person);
+        if ($parentFamily instanceof Family) {
+            // Only mark as having parents if at least one parent individual exists
+            // OR if siblings exist (triggers unknown parent boxes)
+            $hasRealParent = ($parentFamily->husband() instanceof Individual)
+                          || ($parentFamily->wife() instanceof Individual);
+            if (!$hasRealParent) {
+                // Check for siblings → unknown parent boxes
+                foreach ($parentFamily->children() as $ch) {
+                    if ($ch->xref() !== $xref) {
+                        $hasRealParent = true;
+                        break;
+                    }
+                }
+            }
+            if ($hasRealParent) {
+                $personHasParents = true;
+                $ancestorLines[] = [
+                    'familyXref' => $parentFamily->xref(),
+                    'type' => 'self',
+                    'personXref' => $xref,
+                ];
+            }
+        }
+        // Only first spouse's parents get ancestor line (lineIndex 1)
+        if (!empty($families) && $families[0]['spouse'] !== null) {
+            $firstSpouse = null;
+            $firstSpFam = $familyObjects[0] ?? null;
+            if ($firstSpFam instanceof Family) {
+                $firstSpouse = $firstSpFam->spouse($person);
+            }
+            if ($firstSpouse instanceof Individual) {
+                $spParentFam = $this->bestParentFamily($firstSpouse);
+                if ($spParentFam instanceof Family) {
+                    $ancestorLines[] = [
+                        'familyXref' => $spParentFam->xref(),
+                        'type' => 'spouse',
+                        'spouseXref' => $firstSpouse->xref(),
+                    ];
+                }
+            }
+        }
+        $hasMultipleAncestorLines = count($ancestorLines) > 1;
+
+        // --- Store node ---
+        $this->nodes[$nodeId] = [
+            'id'        => $nodeId,
+            'type'      => 'couple',
+            'person'    => $personData,
+            'families'  => $families,
+            'isOrigin'  => $isOrigin,
+            'direction' => $direction,
+            'hasMultipleAncestorLines' => $hasMultipleAncestorLines,
+            'ancestorLines' => $ancestorLines,
+            'activeAncestorLine' => 0,
+            'personHasParents' => $personHasParents,
+            'childBirthJd' => $childBirthJd,
+            'originalChildXref' => $originalChildXref,
+        ];
+
+        // --- Ancestors above ---
+        if ($direction >= 0) {
+            $this->collectAncestors($person, $nodeId, $depth, $throughFamily);
+        }
+
+        // --- Children below ---
+        if ($direction <= 0) {
+            foreach ($familyObjects as $fi => $famObj) {
+                $this->collectChildren($person, $nodeId, $famObj, '', $descDepth, $fi);
+            }
+        } elseif ($direction === 1) {
+            // In ancestor direction: collect siblings from throughFamily,
+            // and children from OTHER families (half-siblings from other marriages)
+            foreach ($familyObjects as $fi => $famObj) {
+                if ($throughFamily instanceof Family && $famObj->xref() === $throughFamily->xref()) {
+                    // This is the family we came through — collect siblings (excluding the path child)
+                    $this->collectSiblings($throughFamily, $pathChildXref, $nodeId, $fi);
+                } else {
+                    // Other families — collect all children (half-siblings)
+                    $this->collectSiblings($famObj, '', $nodeId, $fi);
+                }
+            }
+        }
+
+        return $nodeId;
+    }
+
+    /**
+     * Collect ancestor nodes for a person.
+     */
+    private function collectAncestors(Individual $person, string $childNodeId,
+                                      int $depth, ?Family $throughFamily): void
+    {
+        $xref = $person->xref();
+        $parentFamily = $this->bestParentFamily($person);
+
+        // Person's own parent family
+        if ($parentFamily instanceof Family) {
+            $parentPerson = $parentFamily->husband() ?? $parentFamily->wife();
+            if ($parentPerson instanceof Individual) {
+                if ($depth > 0) {
+                    $parentNodeId = $this->collectTree(
+                        $parentPerson, $depth - 1, 1, $parentFamily, false, $xref
+                    );
+                    $this->edges[] = [
+                        'from' => $parentNodeId,
+                        'to'   => $childNodeId,
+                        'type' => 'parent-child',
+                        'line' => 'self',
+                        'lineIndex' => 0,
+                    ];
+                } else {
+                    // Lazy placeholder
+                    $lazyId = $this->nextNodeId();
+                    $this->nodes[$lazyId] = [
+                        'id'    => $lazyId,
+                        'type'  => 'lazy',
+                        'familyXref' => $parentFamily->xref(),
+                        'label' => I18N::translate('Show parents'),
+                        'direction' => 'up',
+                    ];
+                    $this->edges[] = [
+                        'from' => $lazyId,
+                        'to'   => $childNodeId,
+                        'type' => 'parent-child',
+                        'line' => 'self',
+                        'lineIndex' => 0,
+                    ];
+                }
+            } else {
+                // Both parents unknown — show placeholder if siblings exist
+                $hasSiblings = false;
+                foreach ($parentFamily->children() as $child) {
+                    if ($child->xref() !== $xref) {
+                        $hasSiblings = true;
+                        break;
+                    }
+                }
+                if ($hasSiblings) {
+                    $unknownNodeId = $this->nextNodeId();
+                    $this->nodes[$unknownNodeId] = [
+                        'id'        => $unknownNodeId,
+                        'type'      => 'couple',
+                        'person'    => $this->buildUnknownPersonData('M'),
+                        'families'  => [[
+                            'spouse'       => $this->buildUnknownPersonData('F'),
+                            'marriageDate' => '',
+                            'married'      => false,
+                            'divorced'     => false,
+                            'divorceDate'  => '',
+                            'familyUrl'    => '',
+                            'familyXref'   => $parentFamily->xref(),
+                            'spouseHasParents' => false,
+                        ]],
+                        'isOrigin'  => false,
+                        'direction' => 1,
+                        'hasMultipleAncestorLines' => false,
+                        'ancestorLines' => [],
+                        'activeAncestorLine' => 0,
+                        'personHasParents' => false,
+                        'childBirthJd' => 0,
+                        'originalChildXref' => '',
+                        'isUnknown' => true,
+                    ];
+                    $this->edges[] = [
+                        'from' => $unknownNodeId,
+                        'to'   => $childNodeId,
+                        'type' => 'parent-child',
+                        'line' => 'self',
+                        'lineIndex' => 0,
+                    ];
+                    $this->collectSiblings($parentFamily, $xref, $unknownNodeId);
+                }
+            }
+        }
+
+        // Spouse's parent families
+        foreach ($person->spouseFamilies() as $spFam) {
+            if ($throughFamily instanceof Family && $spFam->xref() !== $throughFamily->xref()) {
+                continue;
+            }
+            $spouse = $spFam->spouse($person);
+            if (!$spouse instanceof Individual) continue;
+
+            $spParentFam = $this->bestParentFamily($spouse);
+            if (!$spParentFam instanceof Family) continue;
+
+            $spParent = $spParentFam->husband() ?? $spParentFam->wife();
+            if ($spParent instanceof Individual) {
+                if ($depth > 0) {
+                    $spParentNodeId = $this->collectTree(
+                        $spParent, $depth - 1, 1, $spParentFam, false, $spouse->xref()
+                    );
+                    $this->edges[] = [
+                        'from' => $spParentNodeId,
+                        'to'   => $childNodeId,
+                        'type' => 'parent-child',
+                        'line' => 'spouse',
+                        'lineIndex' => 1,
+                    ];
+                } else {
+                    $lazyId = $this->nextNodeId();
+                    $this->nodes[$lazyId] = [
+                        'id'    => $lazyId,
+                        'type'  => 'lazy',
+                        'familyXref' => $spParentFam->xref(),
+                        'label' => I18N::translate('Show parents'),
+                        'direction' => 'up',
+                    ];
+                    $this->edges[] = [
+                        'from' => $lazyId,
+                        'to'   => $childNodeId,
+                        'type' => 'parent-child',
+                        'line' => 'spouse',
+                        'lineIndex' => 1,
+                    ];
+                }
+            } else {
+                // Both spouse's parents unknown — show placeholder if siblings exist
+                $spHasSiblings = false;
+                foreach ($spParentFam->children() as $ch) {
+                    if ($ch->xref() !== $spouse->xref()) {
+                        $spHasSiblings = true;
+                        break;
+                    }
+                }
+                if ($spHasSiblings) {
+                    $unknownNodeId = $this->nextNodeId();
+                    $this->nodes[$unknownNodeId] = [
+                        'id'        => $unknownNodeId,
+                        'type'      => 'couple',
+                        'person'    => $this->buildUnknownPersonData('M'),
+                        'families'  => [[
+                            'spouse'       => $this->buildUnknownPersonData('F'),
+                            'marriageDate' => '',
+                            'married'      => false,
+                            'divorced'     => false,
+                            'divorceDate'  => '',
+                            'familyUrl'    => '',
+                            'familyXref'   => $spParentFam->xref(),
+                            'spouseHasParents' => false,
+                        ]],
+                        'isOrigin'  => false,
+                        'direction' => 1,
+                        'hasMultipleAncestorLines' => false,
+                        'ancestorLines' => [],
+                        'activeAncestorLine' => 0,
+                        'personHasParents' => false,
+                        'childBirthJd' => 0,
+                        'originalChildXref' => '',
+                        'isUnknown' => true,
+                    ];
+                    $this->edges[] = [
+                        'from' => $unknownNodeId,
+                        'to'   => $childNodeId,
+                        'type' => 'parent-child',
+                        'line' => 'spouse',
+                        'lineIndex' => 1,
+                    ];
+                    $this->collectSiblings($spParentFam, $spouse->xref(), $unknownNodeId);
+                }
+            }
+            break; // One spouse ancestor line only
+        }
+    }
+
+    /**
+     * Collect children nodes below a parent.
+     * @param int $descDepth Maximum descendant depth remaining (-1 = unlimited)
+     */
+    private function collectChildren(Individual $person, string $parentNodeId,
+                                     ?Family $throughFamily, string $excludeXref,
+                                     int $descDepth = -1, int $familyIndex = 0): void
+    {
+        $allChildren = [];
+        foreach ($person->spouseFamilies() as $family) {
+            if ($throughFamily instanceof Family && $family->xref() !== $throughFamily->xref()) {
+                continue;
+            }
+            foreach ($family->children() as $child) {
+                if ($excludeXref !== '' && $child->xref() === $excludeXref) {
+                    continue;
+                }
+                $allChildren[] = $child;
+            }
+        }
+
+        // Sort children by birth date (oldest first = left, unknown dates last)
+        usort($allChildren, static function (Individual $a, Individual $b): int {
+            $ja = $a->getBirthDate()->julianDay();
+            $jb = $b->getBirthDate()->julianDay();
+            if ($ja === 0 && $jb === 0) return 0;
+            if ($ja === 0) return 1;
+            if ($jb === 0) return -1;
+            return $ja <=> $jb;
+        });
+
+        foreach ($allChildren as $child) {
+            if ($descDepth === 0) {
+                // Depth exhausted — create lazy placeholder
+                $childFam = $child->spouseFamilies()->first();
+                if ($childFam instanceof Family) {
+                    $lazyId = $this->nextNodeId();
+                    $this->nodes[$lazyId] = [
+                        'id'    => $lazyId,
+                        'type'  => 'lazy',
+                        'familyXref' => $childFam->xref(),
+                        'label' => '...',
+                        'direction' => 'down',
+                    ];
+                    $this->edges[] = [
+                        'from' => $parentNodeId,
+                        'to'   => $lazyId,
+                        'type' => 'parent-child',
+                        'familyIndex' => $familyIndex,
+                    ];
+                } else {
+                    $childNodeId = $this->collectTree($child, 0, -1, null, false, '');
+                    $this->edges[] = [
+                        'from' => $parentNodeId,
+                        'to'   => $childNodeId,
+                        'type' => 'parent-child',
+                        'familyIndex' => $familyIndex,
+                    ];
+                }
+            } else {
+                $nextDesc = $descDepth > 0 ? $descDepth - 1 : -1;
+                $childNodeId = $this->collectTree($child, 50, -1, null, false, '', $nextDesc);
+                $this->edges[] = [
+                    'from' => $parentNodeId,
+                    'to'   => $childNodeId,
+                    'type' => 'parent-child',
+                    'familyIndex' => $familyIndex,
+                ];
+            }
+        }
+    }
+
+    /**
+     * Collect sibling nodes (children of a family, excluding the path child).
+     */
+    private function collectSiblings(Family $family, string $excludeXref, string $parentNodeId, int $familyIndex = 0): void
+    {
+        $siblings = [];
+        foreach ($family->children() as $child) {
+            if ($excludeXref !== '' && $child->xref() === $excludeXref) {
+                continue;
+            }
+            $siblings[] = $child;
+        }
+
+        // Sort siblings by birth date (oldest first = left, unknown dates last)
+        usort($siblings, static function (Individual $a, Individual $b): int {
+            $ja = $a->getBirthDate()->julianDay();
+            $jb = $b->getBirthDate()->julianDay();
+            if ($ja === 0 && $jb === 0) return 0;
+            if ($ja === 0) return 1;
+            if ($jb === 0) return -1;
+            return $ja <=> $jb;
+        });
+
+        foreach ($siblings as $child) {
+            $siblingNodeId = $this->collectTree($child, 2, -1, null, false, '', 2);
+            $this->edges[] = [
+                'from' => $parentNodeId,
+                'to'   => $siblingNodeId,
+                'type' => 'parent-child',
+                'familyIndex' => $familyIndex,
+            ];
+        }
+    }
+
+    /**
+     * Compare two families by marriage date for sorting (oldest first).
+     */
+    private function compareByMarriageDate(Family $a, Family $b): int
+    {
+        $aDate = 0;
+        $bDate = 0;
+        foreach ($a->facts(Gedcom::MARRIAGE_EVENTS, true) as $fact) {
+            if ($fact->tag() === 'FAM:MARR') {
+                $d = $fact->date()->julianDay();
+                if ($d > 0) { $aDate = $d; break; }
+            }
+        }
+        foreach ($b->facts(Gedcom::MARRIAGE_EVENTS, true) as $fact) {
+            if ($fact->tag() === 'FAM:MARR') {
+                $d = $fact->date()->julianDay();
+                if ($d > 0) { $bDate = $d; break; }
+            }
+        }
+        if ($aDate === 0 && $bDate === 0) return 0;
+        if ($aDate === 0) return 1;
+        if ($bDate === 0) return -1;
+        return $aDate <=> $bDate;
+    }
+
+    // --- AJAX response builders ---
+
+    /**
+     * Expand a node: return JSON subtree data via AJAX.
+     */
+    public function expandNode(string $familyId, string $personId, Tree $tree): string
+    {
+        $family = Registry::familyFactory()->make($familyId, $tree);
+        if (!$family instanceof Family) {
+            return json_encode(['nodes' => [], 'edges' => []]);
+        }
+        $person = $family->husband() ?? $family->wife();
+        if (!$person instanceof Individual) {
+            return json_encode(['nodes' => [], 'edges' => []]);
+        }
+
+        $this->nodes = [];
+        $this->edges = [];
+        $this->visited = [];
+
+        // personId = xref of the child whose parents we're expanding (to exclude from siblings)
+        $rootId = $this->collectTree($person, 2, 1, $family, false, $personId);
+
+        // Save updated counter for subsequent AJAX calls
+        $this->saveNodeIdCounter();
+
+        return json_encode([
+            'nodes' => array_values($this->nodes),
+            'edges' => $this->edges,
+            'rootId' => $rootId,
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * Navigate to a person: return full tree JSON centered on them.
+     */
+    public function navigateTo(string $xref, Tree $tree): string
+    {
+        $person = Registry::individualFactory()->make($xref, $tree);
+        if (!$person instanceof Individual) {
+            return json_encode(['nodes' => [], 'edges' => [], 'rootId' => null]);
+        }
+
+        $this->nodes = [];
+        $this->edges = [];
+        $this->visited = [];
+        $this->nodeIdCounter = 0;
+
+        $rootId = $this->collectTree($person, 50, 0, null, true, '');
+
+        $this->saveNodeIdCounter();
+
+        return json_encode([
+            'nodes' => array_values($this->nodes),
+            'edges' => $this->edges,
+            'rootId' => $rootId,
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * Search persons matching a query — returns JSON for autocomplete.
+     */
+    public function searchPersons(Tree $tree, string $prefix, string $query): string
+    {
+        $results = [];
+
+        if (strlen($query) < 2) {
+            return json_encode($results);
+        }
+
+        // Search individuals by name
+        $search = '%' . addcslashes($query, '\\%_') . '%';
+
+        $rows = DB::table('individuals')
+            ->where('i_file', '=', $tree->id())
+            ->where('i_gedcom', 'LIKE', $search)
+            ->limit(20)
+            ->get();
+
+        foreach ($rows as $row) {
+            $individual = Registry::individualFactory()->make($row->i_id, $tree);
+            if ($individual instanceof Individual && $individual->canShowName()) {
+                $results[] = [
+                    'xref'  => $individual->xref(),
+                    'name'  => strip_tags($individual->fullName()),
+                    'years' => strip_tags($individual->lifespan()),
+                ];
+            }
+        }
+
+        return json_encode($results, JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * Return gender CSS class string.
+     */
+    public function genderCss(Individual $person): string
+    {
+        return match ($person->sex()) {
+            'M'     => 'sp-male',
+            'F'     => 'sp-female',
+            default => 'sp-unknown',
+        };
+    }
+}

@@ -1,0 +1,54 @@
+<?php
+
+use Fisharebest\Webtrees\I18N;
+
+/**
+ * @var string $module
+ * @var string $prefix
+ * @var string $rootXref
+ * @var object $tree
+ * @var string $expandUrl
+ * @var string $searchUrl
+ */
+
+?>
+
+<div class="wt-chart wt-chart-interactive">
+    <div id="<?= $prefix ?>_wrap" class="sp-navigator" data-url-expand="<?= e($expandUrl) ?>" data-url-search="<?= e($searchUrl) ?>" style="height: 500px">
+        <div id="<?= $prefix ?>_overlay" class="sp-loading-overlay sp-overlay-active">
+            <div class="sp-loading-spinner"></div>
+        </div>
+        <div id="<?= $prefix ?>_toolbar" class="sp-toolbar">
+            <div class="sp-search-box">
+                <input type="text" id="<?= $prefix ?>_searchInput" class="sp-search-input" placeholder="<?= I18N::translate('Search person...') ?>" autocomplete="off">
+                <div id="<?= $prefix ?>_searchResults" class="sp-search-results"></div>
+            </div>
+            <button id="<?= $prefix ?>_btnGo" class="sp-btn sp-btn-go" title="<?= I18N::translate('Go to selected person') ?>" disabled>
+                &#x27A4;
+            </button>
+            <span class="sp-toolbar-sep"></span>
+            <button id="<?= $prefix ?>_btnZoomOut" class="sp-btn" title="<?= I18N::translate('Zoom out') ?>">
+                &#x2796;
+            </button>
+            <button id="<?= $prefix ?>_btnZoomReset" class="sp-btn" title="<?= I18N::translate('Reset zoom & center') ?>">
+                <span id="<?= $prefix ?>_zoomDisplay" class="sp-zoom-display">100%</span>
+            </button>
+            <button id="<?= $prefix ?>_btnZoomIn" class="sp-btn" title="<?= I18N::translate('Zoom in') ?>">
+                &#x2795;
+            </button>
+            <button id="<?= $prefix ?>_btnFullscreen" class="sp-btn" title="<?= I18N::translate('Toggle fullscreen') ?>">
+                &#x26F6;
+            </button>
+            <button id="<?= $prefix ?>_btnExport" class="sp-btn" title="<?= I18N::translate('Export as PNG') ?>">
+                &#x1F4BE;
+            </button>
+            <button id="<?= $prefix ?>_btnShare" class="sp-btn" title="<?= I18N::translate('Copy share link') ?>">
+                &#x1F517;
+            </button>
+            <span id="<?= $prefix ?>_loader" class="sp-loader">&#x21BB;</span>
+        </div>
+
+        <canvas id="<?= $prefix ?>_connCanvas" class="sp-conn-canvas"></canvas>
+        <div id="<?= $prefix ?>_canvas" class="sp-navigator-canvas"></div>
+    </div>
+</div>
