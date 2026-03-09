@@ -1264,6 +1264,10 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
         var ty = targets[0].y;
         var dir = tx > srcX ? 1 : -1;
         var r = Math.min(R, Math.abs(tx - srcX), Math.abs(barY - srcY), Math.abs(ty - barY));
+        // Keep corner visibly rounded whenever there is enough room.
+        if (Math.abs(tx - srcX) > 6 && Math.abs(barY - srcY) > 6 && Math.abs(ty - barY) > 6) {
+            r = Math.max(2, r);
+        }
 
         ctx.beginPath();
         ctx.moveTo(srcX, srcY);
@@ -1300,13 +1304,27 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
     ctx.lineTo(maxX, barY);
     ctx.stroke();
 
-    // Individual drops to each child
+    // Individual drops to each child with rounded elbow from fork bar.
+    // This keeps child connectors visually consistent with rounded style.
     for (var i = 0; i < targets.length; i++) {
         var tx = targets[i].x;
         var ty = targets[i].y;
+        var dx = tx - srcX;
+        var absDx = Math.abs(dx);
+        var elbow = Math.min(R, Math.floor(absDx / 2), Math.max(0, ty - barY));
+
         ctx.beginPath();
-        ctx.moveTo(tx, barY);
-        ctx.lineTo(tx, ty);
+        if (absDx < 2 || elbow < 2) {
+            // Near-vertical branch: straight drop.
+            ctx.moveTo(tx, barY);
+            ctx.lineTo(tx, ty);
+        } else {
+            var dir = dx > 0 ? 1 : -1;
+            // Approach from the bar, round into the vertical drop.
+            ctx.moveTo(tx - dir * elbow, barY);
+            ctx.quadraticCurveTo(tx, barY, tx, barY + elbow);
+            ctx.lineTo(tx, ty);
+        }
         ctx.stroke();
         drawDot(tx, ty);
     }
