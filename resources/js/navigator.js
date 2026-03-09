@@ -1028,14 +1028,26 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
                 drawDot(personRightX, lineCenterY);
                 drawDot(spouseLeftX, lineCenterY);
             } else {
-                // Subsequent marriages: draw canvas line from person card to spouse card
-                // Draw line from person's right edge to this spouse's left edge with rounded corner
-                var r = Math.min(R, Math.abs(lineCenterY - firstLineCenterY), spouseLeftX - personRightX);
+                // Subsequent marriages: route through a dedicated lane so lines from
+                // multiple families do not stack on the same bend point.
+                var laneOffset = Math.min(10 + familyIndex * 4, 22);
+                var laneX = Math.min(personRightX + laneOffset, spouseLeftX - 8);
+
+                // Fallback if spouse is extremely close: keep old direct geometry.
+                if (laneX <= personRightX + 2) {
+                    laneX = personRightX + 2;
+                }
+
+                var r = Math.min(R, Math.abs(lineCenterY - firstLineCenterY), Math.abs(spouseLeftX - laneX), Math.abs(laneX - personRightX));
                 ctx.beginPath();
                 ctx.moveTo(personRightX, firstLineCenterY);
-                ctx.lineTo(personRightX, lineCenterY - r);
+                ctx.lineTo(laneX - r, firstLineCenterY);
                 if (r > 0) {
-                    ctx.quadraticCurveTo(personRightX, lineCenterY, personRightX + r, lineCenterY);
+                    ctx.quadraticCurveTo(laneX, firstLineCenterY, laneX, firstLineCenterY + r);
+                }
+                ctx.lineTo(laneX, lineCenterY - r);
+                if (r > 0) {
+                    ctx.quadraticCurveTo(laneX, lineCenterY, laneX + r, lineCenterY);
                 }
                 ctx.lineTo(spouseLeftX, lineCenterY);
                 ctx.stroke();
