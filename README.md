@@ -1,6 +1,6 @@
 # SP Tree Explorer
 
-![release](https://img.shields.io/badge/release-v0.0.1-blue) ![webtrees](https://img.shields.io/badge/webtrees-2.x-green) ![license](https://img.shields.io/badge/license-GPL--3.0-orange)
+[![release](https://img.shields.io/badge/release-v0.0.1-blue)](https://github.com/szporwolik/webtrees-tree-explorer/releases) [![webtrees](https://img.shields.io/badge/webtrees-2.x-green)](https://webtrees.net) [![license](https://img.shields.io/badge/license-GPL--3.0-orange)](https://github.com/szporwolik/webtrees-tree-explorer/blob/main/LICENSE.md)
 
 An interactive family tree navigator for [webtrees](https://webtrees.net/) — the leading open-source genealogy application.
 
