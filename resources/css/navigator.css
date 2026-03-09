@@ -277,6 +277,16 @@
     padding: 2px 4px;
 }
 
+.sp-couple-line-compact {
+    min-width: 30px;
+    min-height: 82px;
+    padding: 1px 2px;
+}
+
+.sp-couple-line-compact .sp-couple-rings {
+    transform: scale(0.9);
+}
+
 .sp-couple-line-divorced {
     min-width: 88px;
     min-height: 94px;
@@ -287,15 +297,7 @@
 
 /* Horizontal connector line behind the rings area */
 .sp-couple-line::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: #c0c6d0;
-    transform: translateY(-50%);
-    z-index: 0;
+    display: none;
 }
 
 /* Vertical drop from rings down to bottom of couple-line area */
@@ -352,7 +354,7 @@
 
 /* Staggered positioning for additional marriages — shift down */
 .sp-couple-line-alt {
-    margin-top: 20px;
+    margin-top: 0;
 }
 
 /* Hide horizontal connector for subsequent marriages — drawn on canvas instead */
@@ -361,7 +363,7 @@
 }
 
 .sp-couple-line-alt + .sp-card {
-    margin-top: 20px;
+    margin-top: 0;
 }
 
 .sp-couple-no-children::after {
@@ -375,6 +377,7 @@
 .sp-card {
     position: relative;
     width: 206px;
+    min-height: 82px;
     background: #ffffff;
     border: 2px solid #d1d5db;
     border-radius: 12px;

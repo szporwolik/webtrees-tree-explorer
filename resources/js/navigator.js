@@ -41,7 +41,9 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.CARD_H         = 82;   // approximate card height
     this.COUPLE_GAP     = 36;   // gap between person card and spouse card (couple-line with rings/dates)
     this.H_GAP          = 24;   // horizontal gap between sibling subtrees
-    this.V_GAP          = 48;   // vertical gap between generations
+    this.V_GAP          = 76;   // vertical gap between generations (global spacing to preserve same-level generations)
+    this.CHILD_TOP_CLEARANCE = 0; // endpoint on card edge so dot is half-visible (preferred visual style)
+    this.FORK_SOURCE_OFFSET = 0; // keep forks continuous from couple line (no visible connector gaps)
     this.LAZY_W         = 192;
     this.LAZY_H         = 36;
 
@@ -622,9 +624,12 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
     // Families (spouse cards with couple lines)
     var spouseCards = [];
     if (node.families && node.families.length > 0) {
+        var familyCount = node.families.length;
         for (var fi = 0; fi < node.families.length; fi++) {
             var fam = node.families[fi];
-            var lineEl = this.createCoupleLine(fam, node.id, fi);
+            var lineEl = this.createCoupleLine(fam, node.id, fi, familyCount);
+
+            // No vertical stagger for multi-marriage — all at same level
             wrapper.appendChild(lineEl);
 
             var sCard = null;
@@ -774,14 +779,15 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
 /**
  * Create couple-line element with marriage rings, dates, and optional divorce info.
  */
-FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, familyIndex) {
+FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, familyIndex, familyCount) {
     var lineEl = document.createElement('div');
     lineEl.className = 'sp-couple-line';
     lineEl.dataset.familyIndex = familyIndex;
 
-    // Add class for staggered positioning of multiple marriages
-    if (familyIndex > 0) {
-        lineEl.classList.add('sp-couple-line-alt');
+    // In multi-marriage rows, keep markers compact and move full dates to tooltip.
+    var compactMode = (familyCount || 1) > 1;
+    if (compactMode) {
+        lineEl.classList.add('sp-couple-line-compact');
     }
 
     // Make the couple-line area clickable → open family page in new tab
@@ -812,16 +818,20 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
     var isDivorced = familyData.divorced || (familyData.spouse && familyData.spouse.divorced);
     var isMarried = familyData.married;
 
+    var tipParts = [];
+    if (isDivorced) tipParts.push('Divorced');
+    else if (isMarried) tipParts.push('Married');
+    else tipParts.push('Partnership');
+    if (familyData.marriageDate) tipParts.push('Marriage: ' + familyData.marriageDate);
+    if (familyData.divorceDate) tipParts.push('Divorce: ' + familyData.divorceDate);
+    lineEl.title = tipParts.join(' | ');
+
     if (isDivorced) {
         // Divorced layout: top date / broken rings / bottom date.
         // Use explicit positions so long localized dates do not collide with connectors.
-        lineEl.classList.add('sp-couple-line-divorced');
-        lineEl.title = [
-            familyData.marriageDate ? ('Marriage: ' + familyData.marriageDate) : '',
-            familyData.divorceDate ? ('Divorce: ' + familyData.divorceDate) : ''
-        ].filter(Boolean).join(' | ');
+        if (!compactMode) lineEl.classList.add('sp-couple-line-divorced');
 
-        if (familyData.marriageDate) {
+        if (!compactMode && familyData.marriageDate) {
             var mDate = document.createElement('span');
             mDate.className = 'sp-couple-date sp-couple-date-top';
             mDate.textContent = familyData.marriageDate;
@@ -834,7 +844,7 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
         brokenRings.innerHTML = '<svg viewBox="0 0 24 14" width="20" height="12"><circle cx="8" cy="7" r="5" fill="none" stroke="#ccc" stroke-width="1.5"/><circle cx="16" cy="7" r="5" fill="none" stroke="#ccc" stroke-width="1.5"/><line x1="4" y1="2" x2="20" y2="12" stroke="#e74c3c" stroke-width="1.5"/></svg>';
         lineEl.appendChild(brokenRings);
 
-        if (familyData.divorceDate) {
+        if (!compactMode && familyData.divorceDate) {
             var dDate = document.createElement('span');
             dDate.className = 'sp-couple-date sp-divorce-date sp-couple-date-bottom';
             dDate.textContent = familyData.divorceDate;
@@ -847,7 +857,7 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
         rings.className = 'sp-couple-rings';
         rings.innerHTML = '<svg viewBox="0 0 24 14" width="20" height="12"><circle cx="8" cy="7" r="5" fill="none" stroke="#f9a8d4" stroke-width="1.5"/><circle cx="16" cy="7" r="5" fill="none" stroke="#67e8f9" stroke-width="1.5"/></svg>';
         lineEl.appendChild(rings);
-        if (familyData.marriageDate) {
+        if (!compactMode && familyData.marriageDate) {
             var mDate = document.createElement('span');
             mDate.className = 'sp-couple-date';
             mDate.textContent = familyData.marriageDate;
@@ -935,6 +945,51 @@ FamilyNavigator.prototype.createLazyElement = function (node, layout) {
 };
 
 // ==========================================================================
+// GEOMETRY HELPERS — Pure calculations (no DOM measurements)
+// ==========================================================================
+
+/**
+ * Get person card right edge X
+ */
+FamilyNavigator.prototype.getPersonRightX = function(layout) {
+    return layout.x + this.CARD_W;
+};
+
+/**
+ * Get person card vertical center Y
+ */
+FamilyNavigator.prototype.getPersonCenterY = function(layout) {
+    // Use standard card height to ensure ALL siblings in same generation
+    // have connectors at EXACTLY same Y, regardless of actual measured height
+    return layout.y + (this.CARD_H / 2);
+};
+
+/**
+ * Get person card bottom Y
+ */
+FamilyNavigator.prototype.getPersonBottomY = function(layout) {
+    // Use measured height for child connector source since children
+    // are aligned by _alignChildRow() to account for height differences
+    return layout.y + layout.h;
+};
+
+/**
+ * Get spouse card left X for given spouse index
+ */
+FamilyNavigator.prototype.getSpouseLeftX = function(layout, spouseIndex) {
+    return layout.x + this.CARD_W + this.COUPLE_GAP + spouseIndex * (this.CARD_W + this.COUPLE_GAP);
+};
+
+/**
+ * Get couple-line center X for given family index
+ */
+FamilyNavigator.prototype.getCoupleLineCenterX = function(layout, familyIndex) {
+    var personRight = this.getPersonRightX(layout);
+    var spouseLeft = this.getSpouseLeftX(layout, familyIndex);
+    return (personRight + spouseLeft) / 2;
+};
+
+// ==========================================================================
 // CANVAS CONNECTORS — draw on <canvas> element behind cards
 // ==========================================================================
 
@@ -978,9 +1033,12 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         ctx.fill();
     }
 
-    // Draw couple connectors and dots
-    // For first marriage: dots at person card edge and spouse card edge (CSS draws the horizontal line)
-    // For subsequent marriages: draw canvas line from person to spouse, dots at endpoints
+    // ====================================================================================
+    // PARTNER/SPOUSE CONNECTORS — Horizontal lines at card vertical center
+    // ====================================================================================
+    // CRITICAL: Y position uses layout.y + fixed offset for same-generation alignment
+    // X positions use DOM measurements to handle flexbox spacing correctly
+    
     for (var nodeId in this.layoutMap) {
         var layout = this.layoutMap[nodeId];
         if (!layout || layout.x === undefined) continue;
@@ -995,66 +1053,34 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         var coupleLines = wrapper.querySelectorAll('.sp-couple-line');
         var allCards = wrapper.querySelectorAll('.sp-card');
         
-        // Get person card (first card) right edge position
+        // Get person card (first card)
         var personCard = allCards[0];
-        var personCardRect = personCard ? personCard.getBoundingClientRect() : null;
-        var personRightX = personCard ? layout.x + (personCardRect.right - wrapperRect.left) / this.zoomLevel : layout.x + this.CARD_W;
+        if (!personCard) continue;
         
-        // Get first marriage Y position (for drawing subsequent marriage starting point)
-        var firstLineEl = coupleLines.length > 0 ? coupleLines[0] : null;
-        var firstLineRect = firstLineEl ? firstLineEl.getBoundingClientRect() : null;
-        var firstLineCenterY = firstLineRect 
-            ? layout.y + ((firstLineRect.top + firstLineRect.height / 2) - wrapperRect.top) / this.zoomLevel
-            : layout.y + layout.h / 2;
+        var personCardRect = personCard.getBoundingClientRect();
+        // Person's right edge X coordinate
+        var personRightX = layout.x + (personCardRect.right - wrapperRect.left) / this.zoomLevel;
+        // Connector Y (same for all spouses = calculated center)
+        var connectorY = this.getPersonCenterY(layout);
         
-        for (var li = 0; li < coupleLines.length; li++) {
-            var lineEl = coupleLines[li];
-            var familyIndex = parseInt(lineEl.dataset.familyIndex) || 0;
-            var lineRect = lineEl.getBoundingClientRect();
-            var lineCenterY = layout.y + ((lineRect.top + lineRect.height / 2) - wrapperRect.top) / this.zoomLevel;
+        // Draw connector for each family (person to each spouse)
+        for (var fi = 0; fi < coupleLines.length; fi++) {
+            // Spouse card is at allCards index (fi + 1)
+            var spouseCard = allCards[fi + 1];
+            if (!spouseCard) continue;
             
-            // Get spouse card (follows the couple-line)
-            var spouseCard = lineEl.nextElementSibling;
-            var spouseLeftX;
-            if (spouseCard && spouseCard.classList.contains('sp-card')) {
-                var spouseRect = spouseCard.getBoundingClientRect();
-                spouseLeftX = layout.x + (spouseRect.left - wrapperRect.left) / this.zoomLevel;
-            } else {
-                spouseLeftX = layout.x + (lineRect.right - wrapperRect.left) / this.zoomLevel;
-            }
+            var spouseCardRect = spouseCard.getBoundingClientRect();
+            // Spouse's left edge X coordinate
+            var spouseLeftX = layout.x + (spouseCardRect.left - wrapperRect.left) / this.zoomLevel;
             
-            if (familyIndex === 0) {
-                // First marriage: CSS handles horizontal line, draw dots at card edges
-                drawDot(personRightX, lineCenterY);
-                drawDot(spouseLeftX, lineCenterY);
-            } else {
-                // Subsequent marriages: route through a dedicated lane so lines from
-                // multiple families do not stack on the same bend point.
-                var laneOffset = Math.min(10 + familyIndex * 4, 22);
-                var laneX = Math.min(personRightX + laneOffset, spouseLeftX - 8);
-
-                // Fallback if spouse is extremely close: keep old direct geometry.
-                if (laneX <= personRightX + 2) {
-                    laneX = personRightX + 2;
-                }
-
-                var r = Math.min(R, Math.abs(lineCenterY - firstLineCenterY), Math.abs(spouseLeftX - laneX), Math.abs(laneX - personRightX));
-                ctx.beginPath();
-                ctx.moveTo(personRightX, firstLineCenterY);
-                ctx.lineTo(laneX - r, firstLineCenterY);
-                if (r > 0) {
-                    ctx.quadraticCurveTo(laneX, firstLineCenterY, laneX, firstLineCenterY + r);
-                }
-                ctx.lineTo(laneX, lineCenterY - r);
-                if (r > 0) {
-                    ctx.quadraticCurveTo(laneX, lineCenterY, laneX + r, lineCenterY);
-                }
-                ctx.lineTo(spouseLeftX, lineCenterY);
-                ctx.stroke();
-                
-                // Draw dot only at spouse card edge (person edge dot shared with first marriage)
-                drawDot(spouseLeftX, lineCenterY);
-            }
+            ctx.beginPath();
+            ctx.moveTo(personRightX, connectorY);
+            ctx.lineTo(spouseLeftX, connectorY);
+            ctx.stroke();
+            
+            // Draw anchor dots at both ends
+            drawDot(personRightX, connectorY);
+            drawDot(spouseLeftX, connectorY);
         }
     }
 
@@ -1069,97 +1095,70 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         var pNode = this.nodeMap[parentId];
         var srcY = pLayout.y + pLayout.h;
 
-        // Helper: find the rendered center X of a couple-line element by familyIndex.
-        // Falls back to a theoretical position when the DOM element is unavailable.
+        // Helper: find couple-line center X for given family index
+        // Use DOM measurement for X (flexbox can shift)
         var self = this;
-        var wrapperRect = null; // Cache wrapper rect for performance
-        
-        function getWrapperRect(nodeId) {
-            var wrapper = self.cardElements[nodeId];
-            if (!wrapper) return null;
-            return wrapper.getBoundingClientRect();
-        }
-        
         function coupleLineCenterX(nodeId, layout, fi) {
             var wrapper = self.cardElements[nodeId];
             if (wrapper) {
                 var lines = wrapper.querySelectorAll('.sp-couple-line');
-                for (var li = 0; li < lines.length; li++) {
-                    if (parseInt(lines[li].dataset.familyIndex) === fi) {
-                        return layout.x + lines[li].offsetLeft + lines[li].offsetWidth / 2;
-                    }
+                if (lines[fi]) {
+                    var wRect = wrapper.getBoundingClientRect();
+                    var lineRect = lines[fi].getBoundingClientRect();
+                    return layout.x + ((lineRect.left + lineRect.width / 2) - wRect.left) / self.zoomLevel;
                 }
             }
-            // Fallback: theoretical position
-            return layout.x + self.CARD_W + fi * (self.COUPLE_GAP + self.CARD_W) + self.COUPLE_GAP / 2;
+            // Fallback to calculated
+            return self.getCoupleLineCenterX(layout, fi);
         }
 
-        // Helper: find the bottom Y of a couple-line element for connector source
-        // Uses getBoundingClientRect to correctly handle margins
+        // Helper: find bottom Y of card for connector source
+        // Use CALCULATED Y position (ensures same-generation alignment)
         function coupleLineBottomY(nodeId, layout, fi) {
-            var wrapper = self.cardElements[nodeId];
-            if (wrapper) {
-                var wRect = wrapper.getBoundingClientRect();
-                var lines = wrapper.querySelectorAll('.sp-couple-line');
-                for (var li = 0; li < lines.length; li++) {
-                    if (parseInt(lines[li].dataset.familyIndex) === fi) {
-                        var lineRect = lines[li].getBoundingClientRect();
-                        // Convert from viewport coords to canvas coords
-                        var relativeBottom = (lineRect.bottom - wRect.top) / self.zoomLevel;
-                        return layout.y + relativeBottom;
-                    }
-                }
-            }
-            // Fallback
-            return layout.y + layout.h;
+            return self.getPersonBottomY(layout);
         }
 
-        // Helper: find the rendered center X of a spouse card (right side) for
-        // a child node.  The person card is always first (offsetLeft ≈ 0), so
-        // its center never needs DOM lookup.
-        function spouseCardCenterX(nodeId, layout, spouseFI) {
-            var wrapper = self.cardElements[nodeId];
-            if (wrapper) {
-                // Spouse card follows its couple-line.  Find the couple-line
-                // for spouseFI, then take the next element sibling (the card).
-                var lines = wrapper.querySelectorAll('.sp-couple-line');
-                for (var li = 0; li < lines.length; li++) {
-                    if (parseInt(lines[li].dataset.familyIndex) === spouseFI) {
-                        var sCard = lines[li].nextElementSibling;
-                        if (sCard) {
-                            return layout.x + sCard.offsetLeft + sCard.offsetWidth / 2;
+        // Helper: compute target X,Y for a child node
+        // X: Use DOM measurement for accuracy
+        // Y: Use calculated position (same-generation alignment)
+        function targetXForChild(childId, edge) {
+            var cLayout = self.layoutMap[childId];
+            if (!cLayout || cLayout.x === undefined) return null;
+            
+            var childNode = self.nodeMap[childId];
+            var tx = cLayout.centerX;  // Default: wrapper center
+            var ty = cLayout.y - self.CHILD_TOP_CLEARANCE;
+            
+            // If child has families, target specific card (person or spouse)
+            if (childNode && childNode.families && childNode.families.length > 0) {
+                var wrapper = self.cardElements[childId];
+                if (wrapper) {
+                    var wRect = wrapper.getBoundingClientRect();
+                    var cards = wrapper.querySelectorAll('.sp-card');
+                    
+                    if (edge && edge.lineIndex !== undefined) {
+                        // Explicit line index: 0 = person card, 1 = first spouse card
+                        var targetCard = cards[edge.lineIndex === 1 ? 1 : 0];
+                        if (targetCard) {
+                            var cardRect = targetCard.getBoundingClientRect();
+                            tx = cLayout.x + ((cardRect.left + cardRect.width / 2) - wRect.left) / self.zoomLevel;
+                        }
+                    } else {
+                        // Implicit: check originalChildXref to determine target
+                        var oxref = childNode.originalChildXref;
+                        var cFirstSpouse = childNode.families[0].spouse;
+                        var targetCard = cards[0]; // Default to person card
+                        if (oxref && cFirstSpouse && cFirstSpouse.xref === oxref && cards[1]) {
+                            targetCard = cards[1]; // Use spouse card
+                        }
+                        if (targetCard) {
+                            var cardRect = targetCard.getBoundingClientRect();
+                            tx = cLayout.x + ((cardRect.left + cardRect.width / 2) - wRect.left) / self.zoomLevel;
                         }
                     }
                 }
             }
-            // Fallback
-            return layout.x + self.CARD_W + (spouseFI + 1) * (self.COUPLE_GAP + self.CARD_W) - self.CARD_W / 2;
-        }
-
-        // Helper: compute target X for a child node
-        function targetXForChild(childId, edge) {
-            var cLayout = self.layoutMap[childId];
-            if (!cLayout || cLayout.x === undefined) return null;
-            var childNode = self.nodeMap[childId];
-            var tx = cLayout.centerX;
-            if (childNode && childNode.families && childNode.families.length > 0) {
-                if (edge && edge.lineIndex !== undefined) {
-                    if (edge.lineIndex === 1) {
-                        tx = spouseCardCenterX(childId, cLayout, 0);
-                    } else {
-                        tx = cLayout.x + self.CARD_W / 2;
-                    }
-                } else {
-                    var oxref = childNode.originalChildXref;
-                    var cFirstSpouse = childNode.families[0].spouse;
-                    if (oxref && cFirstSpouse && cFirstSpouse.xref === oxref) {
-                        tx = spouseCardCenterX(childId, cLayout, 0);
-                    } else {
-                        tx = cLayout.x + self.CARD_W / 2;
-                    }
-                }
-            }
-            return { x: tx, y: cLayout.y };
+            return { x: tx, y: ty };
         }
 
         // Group children by familyIndex (undefined = ancestor or no-family edges)
@@ -1185,15 +1184,14 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             var fi = parseInt(familyKeys[fki]);
             var items = familyGroups[fi];
             var srcX = coupleLineCenterX(parentId, pLayout, fi);
-            var famSrcY = coupleLineBottomY(parentId, pLayout, fi);
+            var famSrcY = coupleLineBottomY(parentId, pLayout, fi) + this.FORK_SOURCE_OFFSET;
             var targets = [];
             for (var gi = 0; gi < items.length; gi++) {
                 var t = targetXForChild(items[gi].childId, items[gi].edge);
                 if (t) targets.push(t);
             }
             if (targets.length > 0) {
-                // Stagger bar Y so forks from different families don't overlap.
-                // Spread evenly between 0.2 and 0.8 of the vertical gap.
+                // Stagger bar Y so forks from different families don't overlap
                 var barRatio = familyGroupCount > 1
                     ? 0.2 + (fki / (familyGroupCount - 1)) * 0.6
                     : 0.5;
@@ -1207,7 +1205,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             var defSrcY;
             if (pNode && pNode.families && pNode.families.length > 0) {
                 defSrcX = coupleLineCenterX(parentId, pLayout, 0);
-                defSrcY = coupleLineBottomY(parentId, pLayout, 0);
+                defSrcY = coupleLineBottomY(parentId, pLayout, 0) + this.FORK_SOURCE_OFFSET;
             } else {
                 defSrcX = pLayout.centerX;
                 defSrcY = srcY;
@@ -1239,7 +1237,24 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
     for (var i = 1; i < targets.length; i++) {
         if (targets[i].y < nearestY) nearestY = targets[i].y;
     }
+
     var barY = Math.round(srcY + (nearestY - srcY) * barYRatio);
+
+    // Keep a minimum vertical gap from both source and target to reduce
+    // visual collisions with couple-line/marriage area and card tops.
+    var minGapFromSource = 24;
+    var minGapFromTarget = 8;
+    var minBarY = srcY + minGapFromSource;
+    var maxBarY = nearestY - minGapFromTarget;
+    if (minBarY <= maxBarY) {
+        if (barY < minBarY) barY = minBarY;
+        if (barY > maxBarY) barY = maxBarY;
+    } else {
+        // Very tight vertical space: place the bar as low as possible,
+        // prioritizing separation from the couple-level horizontal connector.
+        barY = nearestY - 2;
+        if (barY < srcY + 3) barY = srcY + 3;
+    }
 
     // Helper: draw a small filled circle
     function drawDot(x, y) {
@@ -1298,34 +1313,22 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
     ctx.lineTo(srcX, barY);
     ctx.stroke();
 
-    // Shared horizontal fork bar
+    // Shared horizontal fork bar (continuous; no segmentation gaps).
     ctx.beginPath();
     ctx.moveTo(minX, barY);
     ctx.lineTo(maxX, barY);
     ctx.stroke();
 
-    // Individual drops to each child with rounded elbow from fork bar.
-    // This keeps child connectors visually consistent with rounded style.
+    // Individual drops to each child (straight vertical lines)
     for (var i = 0; i < targets.length; i++) {
         var tx = targets[i].x;
         var ty = targets[i].y;
-        var dx = tx - srcX;
-        var absDx = Math.abs(dx);
-        var elbow = Math.min(R, Math.floor(absDx / 2), Math.max(0, ty - barY));
 
         ctx.beginPath();
-        if (absDx < 2 || elbow < 2) {
-            // Near-vertical branch: straight drop.
-            ctx.moveTo(tx, barY);
-            ctx.lineTo(tx, ty);
-        } else {
-            var dir = dx > 0 ? 1 : -1;
-            // Approach from the bar, round into the vertical drop.
-            ctx.moveTo(tx - dir * elbow, barY);
-            ctx.quadraticCurveTo(tx, barY, tx, barY + elbow);
-            ctx.lineTo(tx, ty);
-        }
+        ctx.moveTo(tx, barY);
+        ctx.lineTo(tx, ty);
         ctx.stroke();
+
         drawDot(tx, ty);
     }
 };
