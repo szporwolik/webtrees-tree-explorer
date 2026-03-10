@@ -808,8 +808,8 @@
 /* Navigate-to-ancestors tree icon (in overlay) */
 .sp-ancestor-expand {
     position: absolute;
-    width: 24px;
-    height: 28px;
+    width: 69px;
+    height: 19px;
     border: none;
     border-radius: 0;
     background: transparent;
@@ -831,8 +831,8 @@
 }
 
 .sp-ancestor-expand svg {
-    width: 22px;
-    height: 26px;
+    width: 67px;
+    height: 17px;
 }
 
 /* =====================================================================

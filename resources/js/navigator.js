@@ -1186,19 +1186,28 @@ FamilyNavigator.prototype._renderIconOverlay = function (canvasW, canvasH) {
             // Position icon above the target card's top-right corner
             var cardLeft = targetCard.offsetLeft + parseFloat(el.style.left);
             var cardTop = targetCard.offsetTop + parseFloat(el.style.top);
-            var iconX = cardLeft + targetCard.offsetWidth - 28;
-            var iconY = cardTop - 27;
+            var iconX = cardLeft + targetCard.offsetWidth - 67;
+            var iconY = cardTop - 18;
 
+            var cc = wtpCSSColors;
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'sp-ancestor-expand';
             btn.title = 'Navigate to ancestors';
-            btn.innerHTML = '<svg viewBox="0 0 24 32" width="22" height="26" aria-hidden="true">'
-                + '<rect x="10.5" y="20" width="3" height="12" rx="1" fill="#8B5E3C"/>'
-                + '<ellipse cx="12" cy="12" rx="9" ry="10" fill="#4aa94e"/>'
-                + '<ellipse cx="7" cy="10" rx="5" ry="6" fill="#5cc460"/>'
-                + '<ellipse cx="17" cy="10" rx="5" ry="6" fill="#5cc460"/>'
-                + '<ellipse cx="12" cy="7" rx="5" ry="5.5" fill="#6fd672"/>'
+            btn.innerHTML = '<svg viewBox="0 0 60 22" width="67" height="17" aria-hidden="true">'
+                + '<line x1="30" y1="18" x2="16" y2="12" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
+                + '<line x1="30" y1="18" x2="44" y2="12" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
+                + '<line x1="16" y1="8" x2="5" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
+                + '<line x1="16" y1="8" x2="25" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
+                + '<line x1="44" y1="8" x2="35" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
+                + '<line x1="44" y1="8" x2="55" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
+                + '<circle cx="5" cy="3" r="2.6" fill="' + cc.ringMaleFill + '" fill-opacity="0.55" stroke="' + cc.ringMaleStroke + '" stroke-width="1.4"/>'
+                + '<circle cx="25" cy="3" r="2.6" fill="' + cc.ringFemaleFill + '" fill-opacity="0.55" stroke="' + cc.ringFemaleStroke + '" stroke-width="1.4"/>'
+                + '<circle cx="35" cy="3" r="2.6" fill="' + cc.ringMaleFill + '" fill-opacity="0.55" stroke="' + cc.ringMaleStroke + '" stroke-width="1.4"/>'
+                + '<circle cx="55" cy="3" r="2.6" fill="' + cc.ringFemaleFill + '" fill-opacity="0.55" stroke="' + cc.ringFemaleStroke + '" stroke-width="1.4"/>'
+                + '<circle cx="16" cy="10" r="3" fill="' + cc.ringMaleFill + '" fill-opacity="0.55" stroke="' + cc.ringMaleStroke + '" stroke-width="1.6"/>'
+                + '<circle cx="44" cy="10" r="3" fill="' + cc.ringFemaleFill + '" fill-opacity="0.55" stroke="' + cc.ringFemaleStroke + '" stroke-width="1.6"/>'
+                + '<circle cx="30" cy="19" r="3" fill="' + cc.connectorLine + '" fill-opacity="0.35" stroke="' + cc.connectorLine + '" stroke-width="1.8"/>'
                 + '</svg>';
             btn.style.position = 'absolute';
             btn.style.left = iconX + 'px';
@@ -1224,12 +1233,21 @@ FamilyNavigator.prototype.createNavigateIcon = function (xref) {
     btn.type = 'button';
     btn.className = 'sp-ancestor-tree-btn sp-ancestor-expand';
     btn.title = 'Navigate to ancestors';
-    btn.innerHTML = '<svg viewBox="0 0 24 32" width="22" height="26" aria-hidden="true">'
-        + '<rect x="10.5" y="20" width="3" height="12" rx="1" fill="#8B5E3C"/>'
-        + '<ellipse cx="12" cy="12" rx="9" ry="10" fill="#4aa94e"/>'
-        + '<ellipse cx="7" cy="10" rx="5" ry="6" fill="#5cc460"/>'
-        + '<ellipse cx="17" cy="10" rx="5" ry="6" fill="#5cc460"/>'
-        + '<ellipse cx="12" cy="7" rx="5" ry="5.5" fill="#6fd672"/>'
+    var cc = wtpCSSColors;
+    btn.innerHTML = '<svg viewBox="0 0 60 22" width="67" height="17" aria-hidden="true">'
+        + '<line x1="30" y1="18" x2="16" y2="12" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
+        + '<line x1="30" y1="18" x2="44" y2="12" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
+        + '<line x1="16" y1="8" x2="5" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
+        + '<line x1="16" y1="8" x2="25" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
+        + '<line x1="44" y1="8" x2="35" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
+        + '<line x1="44" y1="8" x2="55" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
+        + '<circle cx="5" cy="3" r="2.6" fill="' + cc.ringMaleFill + '" fill-opacity="0.55" stroke="' + cc.ringMaleStroke + '" stroke-width="1.4"/>'
+        + '<circle cx="25" cy="3" r="2.6" fill="' + cc.ringFemaleFill + '" fill-opacity="0.55" stroke="' + cc.ringFemaleStroke + '" stroke-width="1.4"/>'
+        + '<circle cx="35" cy="3" r="2.6" fill="' + cc.ringMaleFill + '" fill-opacity="0.55" stroke="' + cc.ringMaleStroke + '" stroke-width="1.4"/>'
+        + '<circle cx="55" cy="3" r="2.6" fill="' + cc.ringFemaleFill + '" fill-opacity="0.55" stroke="' + cc.ringFemaleStroke + '" stroke-width="1.4"/>'
+        + '<circle cx="16" cy="10" r="3" fill="' + cc.ringMaleFill + '" fill-opacity="0.55" stroke="' + cc.ringMaleStroke + '" stroke-width="1.6"/>'
+        + '<circle cx="44" cy="10" r="3" fill="' + cc.ringFemaleFill + '" fill-opacity="0.55" stroke="' + cc.ringFemaleStroke + '" stroke-width="1.6"/>'
+        + '<circle cx="30" cy="19" r="3" fill="' + cc.connectorLine + '" fill-opacity="0.35" stroke="' + cc.connectorLine + '" stroke-width="1.8"/>'
         + '</svg>';
     btn.addEventListener('click', function (e) {
         e.stopPropagation();
