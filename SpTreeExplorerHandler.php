@@ -98,7 +98,6 @@ class SpTreeExplorerHandler extends AbstractModule implements RequestHandlerInte
         $moduleName = Validator::queryParams($request)->string('module');
 
         $renderer = new FamilyTreeRenderer($prefix, $moduleName, $tree, $rootXref);
-        $renderer->restore();
 
         $query = Validator::queryParams($request)->string('q', '');
         $json = $renderer->searchPersons($tree, $prefix, $query);

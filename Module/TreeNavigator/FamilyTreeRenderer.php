@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace SpTreeExplorer\FamilyNav\Module;
 
 use Fisharebest\Webtrees\Auth;
+use Fisharebest\Webtrees\Age;
 use Fisharebest\Webtrees\DB;
 use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Family;
@@ -163,7 +164,7 @@ class FamilyTreeRenderer
         $isExpanded = $expanded ? 'true' : 'false';
         $jsExpandUrl = addcslashes($expandUrl, "'\\");
         $jsSearchUrl = addcslashes($searchUrl, "'\\");
-        $jsInit = 'var ' . $this->jsHandle . 'Controller = new FamilyNavigator("'
+        $jsInit = 'wtpInitCSSColors(); var ' . $this->jsHandle . 'Controller = new FamilyNavigator("'
             . $cardName . '", ' . $isExpanded . ', '
             . $treeData . ', "'
             . $jsExpandUrl . '", "'
@@ -177,6 +178,63 @@ class FamilyTreeRenderer
      */
     private function buildPersonData(Individual $person, bool $isOrigin = false): array
     {
+        $birthDate = $person->getBirthDate();
+        $deathDate = $person->getDeathDate();
+        $birthMeta = ['quality' => 'exact', 'place' => ''];
+        $deathMeta = ['quality' => 'exact', 'place' => ''];
+
+        foreach ($person->facts(Gedcom::BIRTH_EVENTS, true) as $fact) {
+            if ($fact->tag() === 'INDI:BIRT') {
+                $birthMeta = $this->extractEventMeta($fact->gedcom());
+                break;
+            }
+        }
+
+        foreach ($person->facts(Gedcom::DEATH_EVENTS, true) as $fact) {
+            if ($fact->tag() === 'INDI:DEAT') {
+                $deathMeta = $this->extractEventMeta($fact->gedcom());
+                break;
+            }
+        }
+
+        $birthText = $birthDate->isOK() ? strip_tags($birthDate->display($this->tree, null, true)) : '';
+        $deathText = $deathDate->isOK() ? strip_tags($deathDate->display($this->tree, null, true)) : '';
+
+        // Keep compact lifespan for known birth+death, and show explicit labels for partial data.
+        if ($birthText !== '' && $deathText !== '') {
+            $dateLine = strip_tags($person->lifespan());
+        } elseif ($birthText !== '') {
+            $dateLine = $birthText;
+        } elseif ($deathText !== '') {
+            $dateLine = '? - ' . $deathText;
+        } else {
+            $dateLine = strip_tags($person->lifespan());
+        }
+
+        $fatherAgeAtBirth = null;
+        $motherAgeAtBirth = null;
+
+        if ($birthDate->isOK()) {
+            $parentFamily = $this->bestParentFamily($person);
+            if ($parentFamily instanceof Family) {
+                $father = $parentFamily->husband();
+                if ($father instanceof Individual && $father->getBirthDate()->isOK()) {
+                    $fatherAge = new Age($father->getBirthDate(), $birthDate);
+                    if ($fatherAge->ageYears() >= 0) {
+                        $fatherAgeAtBirth = $fatherAge->ageYears();
+                    }
+                }
+
+                $mother = $parentFamily->wife();
+                if ($mother instanceof Individual && $mother->getBirthDate()->isOK()) {
+                    $motherAge = new Age($mother->getBirthDate(), $birthDate);
+                    if ($motherAge->ageYears() >= 0) {
+                        $motherAgeAtBirth = $motherAge->ageYears();
+                    }
+                }
+            }
+        }
+
         $thumbUrl = '';
         try {
             $imgTag = $person->displayImage(80, 80, 'contain', []);
@@ -187,11 +245,21 @@ class FamilyTreeRenderer
             // No image available
         }
 
+        $personGedcom = $person->gedcom();
+        $sourceCount = $this->countLevelOneTag($personGedcom, 'SOUR');
+        $noteCount = $this->countLevelOneTag($personGedcom, 'NOTE');
+
         return [
             'xref'     => $person->xref(),
             'name'     => strip_tags($person->fullName()),
             'nameHtml' => $person->fullName(),
             'years'    => $person->lifespan(),
+            'dateLine' => $dateLine,
+            'dateLineQuality' => $this->mergeDateQuality($birthMeta['quality'], $deathMeta['quality']),
+            'birthPlace' => $birthMeta['place'],
+            'deathPlace' => $deathMeta['place'],
+            'fatherAgeAtBirth' => $fatherAgeAtBirth,
+            'motherAgeAtBirth' => $motherAgeAtBirth,
             'sex'      => $person->sex(),
             'url'      => $person->url(),
             'addMediaUrl' => route(AddNewFact::class, [
@@ -199,6 +267,18 @@ class FamilyTreeRenderer
                 'xref' => $person->xref(),
                 'fact' => 'OBJE',
             ]),
+            'addNoteUrl' => route(AddNewFact::class, [
+                'tree' => $this->tree->name(),
+                'xref' => $person->xref(),
+                'fact' => 'NOTE',
+            ]),
+            'addSourceUrl' => route(AddNewFact::class, [
+                'tree' => $this->tree->name(),
+                'xref' => $person->xref(),
+                'fact' => 'SOUR',
+            ]),
+            'sourceCount' => $sourceCount,
+            'noteCount' => $noteCount,
             'thumb'    => $thumbUrl,
             'isDead'   => $person->isDead(),
             'isOrigin' => $isOrigin,
@@ -215,9 +295,19 @@ class FamilyTreeRenderer
             'name'        => '?',
             'nameHtml'    => '?',
             'years'       => '',
+            'dateLine'    => '',
+            'dateLineQuality' => 'unknown',
+            'birthPlace'  => '',
+            'deathPlace'  => '',
+            'fatherAgeAtBirth' => null,
+            'motherAgeAtBirth' => null,
             'sex'         => $sex,
             'url'         => '',
             'addMediaUrl' => '',
+            'addNoteUrl'  => '',
+            'addSourceUrl' => '',
+            'sourceCount' => 0,
+            'noteCount'   => 0,
             'thumb'       => null,
             'isDead'      => false,
             'isOrigin'    => false,
@@ -307,31 +397,59 @@ class FamilyTreeRenderer
         $familyObjects = [];
         $genderSwapped = false;
 
-        foreach ($allSpouseFamilies as $spouseFamily) {
+        foreach ($allSpouseFamilies as $famIdx => $spouseFamily) {
             $spouse = $spouseFamily->spouse($person);
             $spouseData = null;
             $divorced = false;
             $married = false;
             $marriageDate = '';
             $divorceDate = '';
+            $marriagePlace = '';
+            $divorcePlace = '';
+            $marriageQuality = 'unknown';
+            $divorceQuality = 'unknown';
+            $marriageJd = 0;
+            $divorceJd = 0;
             $familyUrl = $spouseFamily->url();
             $spouseHasParents = false;
+            $nextMarriageJd = 0;
+            $hasNextRelationship = isset($allSpouseFamilies[$famIdx + 1]);
+
+            if (isset($allSpouseFamilies[$famIdx + 1]) && $allSpouseFamilies[$famIdx + 1] instanceof Family) {
+                $nextMarriageJd = $this->firstMarriageJulianDay($allSpouseFamilies[$famIdx + 1]);
+            }
 
             if ($spouse instanceof Individual) {
                 foreach ($spouseFamily->facts(Gedcom::MARRIAGE_EVENTS, true) as $fact) {
                     if ($fact->tag() === 'FAM:MARR') {
                         $married = true;
                     }
+                    $meta = $this->extractEventMeta($fact->gedcom());
+                    if ($marriagePlace === '' && $meta['place'] !== '') {
+                        $marriagePlace = $meta['place'];
+                    }
+                    if ($marriageQuality === 'unknown') {
+                        $marriageQuality = $meta['quality'];
+                    }
                     $mDate = $fact->date();
                     if ($mDate->isOK()) {
                         $marriageDate = strip_tags($mDate->display());
+                        $marriageJd = $mDate->julianDay();
                     }
                 }
                 foreach ($spouseFamily->facts(Gedcom::DIVORCE_EVENTS, true) as $fact) {
                     $divorced = true;
+                    $meta = $this->extractEventMeta($fact->gedcom());
+                    if ($divorcePlace === '' && $meta['place'] !== '') {
+                        $divorcePlace = $meta['place'];
+                    }
+                    if ($divorceQuality === 'unknown') {
+                        $divorceQuality = $meta['quality'];
+                    }
                     $dDate = $fact->date();
                     if ($dDate->isOK()) {
                         $divorceDate = strip_tags($dDate->display());
+                        $divorceJd = $dDate->julianDay();
                     }
                 }
                 $spouseData = $this->buildPersonData($spouse);
@@ -367,12 +485,25 @@ class FamilyTreeRenderer
                 }
             }
 
+            $familyGedcom = $spouseFamily->gedcom();
+            $familySourceCount = $this->countLevelOneTag($familyGedcom, 'SOUR');
+            $familyNoteCount = $this->countLevelOneTag($familyGedcom, 'NOTE');
+            $durationLabel = $this->formatRelationshipDuration($marriageJd, $divorceJd, $nextMarriageJd);
+
             $families[] = [
                 'spouse'       => $spouseData,
                 'marriageDate' => $marriageDate,
+                'marriagePlace' => $marriagePlace,
+                'marriageQuality' => $marriageQuality,
                 'married'      => $married,
                 'divorced'     => $divorced,
                 'divorceDate'  => $divorceDate,
+                'divorcePlace' => $divorcePlace,
+                'divorceQuality' => $divorceQuality,
+                'durationLabel' => $durationLabel,
+                'hasNextRelationship' => $hasNextRelationship,
+                'familySourceCount' => $familySourceCount,
+                'familyNoteCount' => $familyNoteCount,
                 'familyUrl'    => $familyUrl,
                 'familyXref'   => $spouseFamily->xref(),
                 'spouseHasParents' => $spouseHasParents,
@@ -778,6 +909,124 @@ class FamilyTreeRenderer
         if ($aDate === 0) return 1;
         if ($bDate === 0) return -1;
         return $aDate <=> $bDate;
+    }
+
+    /**
+     * Extract date quality and place from a fact GEDCOM snippet.
+     * @return array{quality:string, place:string}
+     */
+    private function extractEventMeta(string $factGedcom): array
+    {
+        $rawDate = '';
+        if (preg_match('/\n2 DATE\s+([^\r\n]+)/', $factGedcom, $m)) {
+            $rawDate = trim($m[1]);
+        }
+
+        $place = '';
+        if (preg_match('/\n2 PLAC\s+([^\r\n]+)/', $factGedcom, $m)) {
+            $place = trim($m[1]);
+        }
+
+        $quality = 'unknown';
+        if ($rawDate !== '') {
+            if (preg_match('/\b(ABT|ABOUT|CAL|EST)\b/i', $rawDate)) {
+                $quality = 'approx';
+            } elseif (preg_match('/\b(BEF|AFT|BET|AND|FROM|TO)\b/i', $rawDate)) {
+                $quality = 'range';
+            } else {
+                $quality = 'exact';
+            }
+        }
+
+        return [
+            'quality' => $quality,
+            'place' => $place,
+        ];
+    }
+
+    /**
+     * Merge two quality markers into one badge for the main date line.
+     */
+    private function mergeDateQuality(string $a, string $b): string
+    {
+        $ordered = ['range', 'approx', 'exact', 'unknown'];
+        foreach ($ordered as $q) {
+            if ($a === $q || $b === $q) {
+                return $q;
+            }
+        }
+
+        return 'unknown';
+    }
+
+    /**
+     * Count level-1 GEDCOM tags in one record.
+     */
+    private function countLevelOneTag(string $gedcom, string $tag): int
+    {
+        if ($gedcom === '') {
+            return 0;
+        }
+
+        $matches = [];
+        preg_match_all('/(?:^|\n)1\s+' . preg_quote($tag, '/') . '\b/', $gedcom, $matches);
+        return count($matches[0]);
+    }
+
+    /**
+     * Find first valid marriage date (Julian day) in a family.
+     */
+    private function firstMarriageJulianDay(Family $family): int
+    {
+        foreach ($family->facts(Gedcom::MARRIAGE_EVENTS, true) as $fact) {
+            if ($fact->tag() !== 'FAM:MARR') {
+                continue;
+            }
+
+            $jd = $fact->date()->julianDay();
+            if ($jd > 0) {
+                return $jd;
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * Build compact relationship duration label (e.g. "12y 3m").
+     */
+    private function formatRelationshipDuration(int $startJd, int $endJd, int $fallbackEndJd): string
+    {
+        if ($startJd <= 0) {
+            return '';
+        }
+
+        $effectiveEndJd = 0;
+        if ($endJd > 0) {
+            $effectiveEndJd = $endJd;
+        } elseif ($fallbackEndJd > 0) {
+            $effectiveEndJd = $fallbackEndJd;
+        } else {
+            $now = getdate();
+            $effectiveEndJd = gregoriantojd((int) $now['mon'], (int) $now['mday'], (int) $now['year']);
+        }
+
+        $days = max(0, $effectiveEndJd - $startJd);
+        if ($days === 0) {
+            return '';
+        }
+
+        $years = (int) floor($days / 365.2425);
+        $months = (int) floor(($days - ($years * 365.2425)) / 30.436875);
+
+        if ($years > 0 && $months > 0) {
+            return $years . 'y ' . $months . 'm';
+        }
+        if ($years > 0) {
+            return $years . 'y';
+        }
+
+        return max(1, $months) . 'm';
     }
 
     // --- AJAX response builders ---

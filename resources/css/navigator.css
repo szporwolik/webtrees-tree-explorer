@@ -140,7 +140,7 @@
 }
 
 .sp-search-results {
-    display: none;
+    display: none !important;
     position: absolute;
     top: 100%;
     left: 0;
@@ -262,37 +262,48 @@
     flex-direction: row;
     align-items: flex-start;
     justify-content: center;
+    overflow: visible;
 }
 
 .sp-couple-line {
-    min-width: 36px;
+    min-width: 56px;
     min-height: 82px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 1px;
+    gap: 4px;
     position: relative;
-    padding: 2px 4px;
+    padding: 4px 8px;
+}
+
+.sp-couple-has-next::before {
+    content: '';
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    width: 34px;
+    border-bottom: 1px dashed rgba(120, 132, 150, 0.7);
+    transform: translateX(-50%);
 }
 
 .sp-couple-line-compact {
-    min-width: 30px;
+    min-width: 44px;
     min-height: 82px;
-    padding: 1px 2px;
+    padding: 2px 4px;
 }
 
 .sp-couple-line-compact .sp-couple-rings {
-    transform: scale(0.9);
+    transform: none;
 }
 
 .sp-couple-line-divorced {
-    min-width: 88px;
-    min-height: 94px;
+    min-width: 120px;
+    min-height: 108px;
     justify-content: space-between;
-    padding: 4px 6px;
-    gap: 4px;
+    padding: 6px 10px;
+    gap: 6px;
 }
 
 /* Horizontal connector line behind the rings area */
@@ -302,16 +313,7 @@
 
 /* Vertical drop from rings down to bottom of couple-line area */
 .sp-couple-line::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    bottom: -2px;
-    left: 50%;
-    width: 2px;
-    background: #c0c6d0;
-    transform: translateX(-50%);
-    z-index: 0;
-    border-radius: 1px;
+    display: none;
 }
 
 /* Hide CSS drop for staggered multi-marriage (canvas draws it instead) */
@@ -320,30 +322,76 @@
 }
 
 .sp-couple-rings {
-    font-size: 12px;
+    font-size: 24px;
     line-height: 1;
     z-index: 1;
     position: relative;
+    opacity: 0.88;
+    filter: saturate(0.9);
+    transition: opacity 0.14s ease, filter 0.14s ease, transform 0.14s ease;
+}
+
+.sp-couple-rings svg {
+    display: block;
 }
 
 .sp-couple-rings.sp-rings-broken {
-    font-size: 11px;
+    font-size: 22px;
     filter: grayscale(0.5);
 }
 
 .sp-couple-date {
-    font-size: 9px;
-    color: #888;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--wtp-chip-text);
     white-space: nowrap;
-    line-height: 1;
+    line-height: 1.2;
     z-index: 1;
     position: relative;
-    max-width: 78px;
+    max-width: 132px;
     overflow: hidden;
     text-overflow: ellipsis;
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 4px;
-    padding: 1px 3px;
+    background: var(--wtp-chip-bg);
+    border: 1px solid var(--wtp-chip-border);
+    border-radius: 999px;
+    padding: 4px 10px;
+    backdrop-filter: blur(4px);
+    transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.sp-couple-date-has-place::after {
+    content: '\2022';
+    margin-left: 5px;
+    color: #7c8898;
+    font-weight: 700;
+}
+
+.sp-couple-date-approx {
+    border-style: dashed;
+}
+
+.sp-couple-date-range {
+    color: #475569;
+    border-color: rgba(71, 85, 105, 0.25);
+}
+
+.sp-couple-duration {
+    font-size: 10px;
+    color: #64748b;
+    line-height: 1;
+    margin-top: -1px;
+    z-index: 1;
+}
+
+.sp-couple-metrics {
+    font-size: 10px;
+    color: #728096;
+    line-height: 1;
+    z-index: 1;
 }
 
 .sp-divorce-date {
@@ -356,6 +404,17 @@
 
 .sp-couple-date-bottom {
     align-self: center;
+}
+
+.sp-couple-line:hover .sp-couple-rings {
+    opacity: 1;
+    filter: saturate(1.06);
+}
+
+.sp-couple-line:hover .sp-couple-date {
+    background: var(--wtp-chip-hover-bg);
+    color: var(--wtp-chip-hover-text);
+    border-color: rgba(0, 0, 0, 0.12);
 }
 
 /* Staggered positioning for additional marriages — shift down */
@@ -388,18 +447,18 @@
     border: 2px solid #d1d5db;
     border-radius: 12px;
     padding: 10px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    box-shadow: var(--wtp-elevation-card);
     cursor: default;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    transition: box-shadow 0.2s, transform 0.15s;
+    font-family: "Manrope", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    transition: box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
+    overflow: visible;
 }
 
 .sp-card:hover {
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
-    transform: translateY(-1px);
+    box-shadow: var(--wtp-elevation-hover);
 }
 
 /* Gender-based full border color */
@@ -496,6 +555,16 @@
     text-decoration: none;
 }
 
+/* Neutral placeholder with camera icon (click opens add-media page) */
+.sp-avatar-wrap.sp-avatar-placeholder {
+    background-color: #e5e7eb;
+    border-color: #cfd4dc;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23707a8a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h3l1.2-1.8A2 2 0 0 1 9.86 4h4.28a2 2 0 0 1 1.66 1.2L17 7h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z'/%3E%3Ccircle cx='12' cy='13' r='3.5'/%3E%3C/svg%3E") !important;
+    background-size: 22px 22px !important;
+    background-position: center center !important;
+    background-repeat: no-repeat !important;
+}
+
 /* Male silhouette placeholder */
 .sp-avatar-wrap.sp-silhouette-m {
     background-color: #e0f4f8;
@@ -561,14 +630,83 @@
     line-height: 1.2;
 }
 
+.sp-years-approx {
+    font-style: italic;
+}
+
+.sp-years-range {
+    color: #5f6f85;
+}
+
+.sp-place-marker {
+    margin-left: 6px;
+    color: #8fa0b3;
+    font-size: 10px;
+    vertical-align: middle;
+}
+
+.sp-parent-ages {
+    display: flex;
+    gap: 8px;
+    margin-top: 2px;
+    font-size: 10px;
+    line-height: 1.1;
+    color: #6b7280;
+}
+
+.sp-parent-age {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+}
+
+.sp-parent-age-icon {
+    font-size: 11px;
+    line-height: 1;
+}
+
+.sp-parent-age-father .sp-parent-age-icon {
+    color: #3b82f6;
+}
+
+.sp-parent-age-mother .sp-parent-age-icon {
+    color: #ec4899;
+}
+
+.sp-parent-age-value {
+    font-weight: 600;
+}
+
 /* Card action icons row */
 .sp-card-actions {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     margin-top: 6px;
     padding-top: 4px;
     border-top: 1px solid #f0f0f0;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.sp-card-actions-left,
+.sp-card-actions-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.sp-card-action-link {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.sp-card-counters {
+    font-size: 10px;
+    color: #6b7280;
+    margin-left: 4px;
+    white-space: nowrap;
 }
 
 .sp-card-actions a {
@@ -639,12 +777,62 @@
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    transition: color 0.2s, transform 0.2s;
+    transition: none;
 }
 
 .sp-ancestor-tree-btn:hover {
-    color: #22d3ee;
-    transform: translateX(-50%) scale(1.2);
+    color: #9ca3af;
+    transform: translateX(-50%);
+}
+
+.sp-ancestor-tree-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Icon overlay — floats over viewport, allows icons above cards */
+.sp-icon-overlay {
+    position: absolute;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 6;
+}
+
+.sp-icon-overlay-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+}
+
+/* Navigate-to-ancestors tree icon (in overlay) */
+.sp-ancestor-expand {
+    position: absolute;
+    width: 24px;
+    height: 28px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    box-shadow: none;
+    pointer-events: auto;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0.7;
+    transition: opacity 0.18s ease;
+}
+
+.sp-ancestor-expand:hover {
+    opacity: 1;
+    background: transparent;
+}
+
+.sp-ancestor-expand svg {
+    width: 22px;
+    height: 26px;
 }
 
 /* =====================================================================
@@ -659,16 +847,39 @@
     bottom: 0;
     width: 100vw;
     height: 100vh;
-    z-index: 9000;
+    z-index: 9999;
     border-radius: 0;
     border: none;
     background: #f8f9fb;
+    margin: 0;
+    padding: 0;
 }
 
 .wt-chart-interactive.sp-fullview .sp-navigator {
-    height: 100vh !important;
+    width: 100% !important;
+    height: 100% !important;
     border: none;
     border-radius: 0;
+    position: relative;
+}
+
+/* Ensure toolbar stays visible in fullscreen */
+.wt-chart-interactive.sp-fullview .sp-toolbar {
+    z-index: 10001;
+}
+
+.wt-chart-interactive.sp-fullview .sp-icon-overlay {
+    z-index: 10000;
+}
+
+/* Hide webtrees header and footer when in fullscreen mode */
+body:has(.sp-fullview) .wt-header-wrapper,
+body:has(.sp-fullview) .wt-header,
+body:has(.sp-fullview) header,
+body:has(.sp-fullview) .wt-footer-container,
+body:has(.sp-fullview) footer,
+body:has(.sp-fullview) nav[role="navigation"] {
+    display: none !important;
 }
 
 /* Full-space mode — when the form is hidden, fill available height */
@@ -711,6 +922,7 @@
 
 .wtp-plugin-root {
     /* Host mapping block with safe fallbacks */
+    position: relative;
     --wtp-bg: var(--bs-body-bg, #ffffff);
     --wtp-bg-elevated: var(--bs-secondary-bg, #f8f9fa);
     --wtp-surface: var(--bs-tertiary-bg, #f1f3f5);
@@ -732,11 +944,45 @@
 
     /* Hourglass-like card palette (with host-safe fallbacks) */
     --wtp-card-male-bg: var(--wtp-bg);
+    --wtp-card-male-border: #8bb5d6; /* Fallback for html2canvas */
     --wtp-card-male-border: color-mix(in srgb, var(--wtp-accent) 45%, var(--wtp-border));
     --wtp-card-female-bg: var(--wtp-bg);
     --wtp-card-female-border: #e8a7c4;
     --wtp-card-unknown-bg: var(--wtp-bg);
     --wtp-card-unknown-border: var(--wtp-border);
+
+    /* Icon and marker colors */
+    --wtp-icon-male: #3b82f6;
+    --wtp-icon-female: #ec4899;
+    --wtp-ring-male-fill: #e0f7ff;
+    --wtp-ring-male-stroke: #61d8f0;
+    --wtp-ring-female-fill: #fce7f3;
+    --wtp-ring-female-stroke: #f3a2cb;
+    --wtp-ring-broken-fill: #f1f3f5;
+    --wtp-ring-broken-stroke: #c5c9d1;
+    --wtp-divorce-line: #e74c3c;
+    --wtp-heart-fill: #f3bfd1;
+    --wtp-heart-stroke: #e8a0b8;
+    
+    /* Connector and line colors */
+    --wtp-connector-line: #c0c6d0;
+    --wtp-connector-opacity: 0.9;
+    
+    /* Chip and badge colors */
+    --wtp-chip-bg: rgba(255, 255, 255, 0.92);
+    --wtp-chip-border: rgba(0, 0, 0, 0.08);
+    --wtp-chip-text: #5f6978;
+    --wtp-chip-hover-bg: rgba(255, 255, 255, 0.98);
+    --wtp-chip-hover-text: #4a5568;
+    --wtp-date-approx: #7c8898;
+    --wtp-date-range: #55657a;
+    --wtp-marker-place: #8fa0b3;
+    --wtp-duration-text: #64748b;
+    
+    /* Elevation levels */
+    --wtp-elevation-card: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --wtp-elevation-hover: 0 4px 12px rgba(0, 0, 0, 0.14);
+    --wtp-elevation-overlay: 0 8px 24px rgba(0, 0, 0, 0.18);
 
     color: var(--wtp-text);
 }
@@ -754,8 +1000,10 @@
 
 .wtp-plugin-root :is(input, select, textarea):disabled,
 .wtp-plugin-root :is(button):disabled {
+    color: rgba(55, 65, 81, 0.55); /* Fallback for html2canvas */
     color: color-mix(in srgb, var(--wtp-text) 55%, transparent);
     border-color: var(--wtp-border);
+    background: rgba(255, 255, 255, 0.75); /* Fallback for html2canvas */
     background: color-mix(in srgb, var(--wtp-bg-elevated) 75%, var(--wtp-bg));
     opacity: 1;
 }
@@ -797,6 +1045,7 @@
 
 .wtp-plugin-root .sp-toolbar .sp-btn.sp-active {
     color: var(--wtp-accent);
+    background: rgba(59, 130, 246, 0.16); /* Fallback for html2canvas */
     background: color-mix(in srgb, var(--wtp-accent) 16%, var(--wtp-bg));
 }
 
@@ -836,6 +1085,7 @@
 .wtp-plugin-root .sp-search-input:focus,
 .wtp-plugin-root .wt-page-options :is(input[type="text"], select, textarea):focus {
     border-color: var(--wtp-focus);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.24); /* Fallback for html2canvas */
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--wtp-focus) 24%, transparent);
 }
 
@@ -886,12 +1136,16 @@
 }
 
 .wtp-plugin-root .sp-card.sp-origin.sp-male {
+    border-color: #5a9dd6; /* Fallback for html2canvas */
     border-color: color-mix(in srgb, var(--wtp-card-male-border) 82%, var(--wtp-accent));
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.28), 0 4px 14px rgba(0, 0, 0, 0.14); /* Fallback for html2canvas */
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--wtp-accent) 28%, transparent), 0 4px 14px rgba(0, 0, 0, 0.14);
 }
 
 .wtp-plugin-root .sp-card.sp-origin.sp-female {
+    border-color: #e694ba; /* Fallback for html2canvas */
     border-color: color-mix(in srgb, var(--wtp-card-female-border) 86%, #d56aa0);
+    box-shadow: 0 0 0 1px rgba(213, 106, 160, 0.22), 0 4px 14px rgba(0, 0, 0, 0.14); /* Fallback for html2canvas */
     box-shadow: 0 0 0 1px color-mix(in srgb, #d56aa0 22%, transparent), 0 4px 14px rgba(0, 0, 0, 0.14);
 }
 
@@ -904,9 +1158,39 @@
 }
 
 .wtp-plugin-root .sp-years,
+.wtp-plugin-root .sp-parent-ages,
 .wtp-plugin-root .sp-search-years,
 .wtp-plugin-root .sp-card-actions a {
     color: var(--wtp-text-muted);
+}
+
+.wtp-plugin-root .sp-years-approx {
+    color: var(--wtp-date-approx);
+}
+
+.wtp-plugin-root .sp-years-range {
+    color: var(--wtp-date-range);
+}
+
+.wtp-plugin-root .sp-place-marker,
+.wtp-plugin-root .sp-couple-date-has-place::after {
+    color: var(--wtp-marker-place);
+}
+
+.wtp-plugin-root .sp-couple-duration,
+.wtp-plugin-root .sp-couple-metrics,
+.wtp-plugin-root .sp-card-counters {
+    color: var(--wtp-duration-text);
+}
+
+.wtp-plugin-root .sp-parent-age-father .sp-parent-age-icon {
+    color: #5a7a99; /* Fallback for html2canvas */
+    color: color-mix(in srgb, var(--wtp-card-male-border) 84%, var(--wtp-text));
+}
+
+.wtp-plugin-root .sp-parent-age-mother .sp-parent-age-icon {
+    color: #d08aaa; /* Fallback for html2canvas */
+    color: color-mix(in srgb, var(--wtp-card-female-border) 84%, var(--wtp-text));
 }
 
 .wtp-plugin-root .sp-card-actions {
@@ -932,6 +1216,7 @@
 }
 
 .wtp-plugin-root .sp-search-item:hover {
+    background: rgba(59, 130, 246, 0.10); /* Fallback for html2canvas */
     background: color-mix(in srgb, var(--wtp-accent) 10%, var(--wtp-bg));
 }
 
@@ -942,6 +1227,7 @@
 /* Loading and states */
 .wtp-plugin-root .sp-loading-overlay {
     z-index: 1040;
+    background: rgba(255, 255, 255, 0.78); /* Fallback for html2canvas */
     background: color-mix(in srgb, var(--wtp-bg-elevated) 78%, transparent);
 }
 
@@ -953,6 +1239,7 @@
 .wtp-plugin-root .sp-lazy-placeholder {
     border-color: var(--wtp-border);
     color: var(--wtp-text-muted);
+    background: rgba(248, 249, 251, 0.78); /* Fallback for html2canvas */
     background: color-mix(in srgb, var(--wtp-bg) 78%, transparent);
     border-radius: 999px;
 }
@@ -960,6 +1247,7 @@
 .wtp-plugin-root .sp-lazy-placeholder:hover {
     border-color: var(--wtp-accent);
     color: var(--wtp-link-hover);
+    background: rgba(59, 130, 246, 0.10); /* Fallback for html2canvas */
     background: color-mix(in srgb, var(--wtp-accent) 10%, var(--wtp-bg));
 }
 
@@ -981,6 +1269,7 @@
     padding: 0.125rem 0.5rem;
     border: 1px solid var(--wtp-border);
     border-radius: 999px;
+    background: rgba(59, 130, 246, 0.14); /* Fallback for html2canvas */
     background: color-mix(in srgb, var(--wtp-accent) 14%, var(--wtp-bg));
     color: var(--wtp-text);
 }
@@ -1000,6 +1289,7 @@
     border: 1px dashed var(--wtp-border-strong);
     border-radius: var(--wtp-radius-md);
     padding: 0.875rem;
+    background: rgba(255, 255, 255, 0.78); /* Fallback for html2canvas */
     background: color-mix(in srgb, var(--wtp-bg-elevated) 78%, var(--wtp-bg));
     color: var(--wtp-text-muted);
 }
@@ -1097,6 +1387,75 @@
 
     .wtp-plugin-root .sp-search-input {
         width: min(52vw, 176px);
+    }
+    
+    /* Card adjustments for tablets */
+    .sp-card {
+        width: 180px;
+        padding: 8px;
+    }
+    
+    .sp-avatar-wrap {
+        width: 36px;
+        height: 36px;
+    }
+    
+    .sp-name {
+        font-size: 11px;
+    }
+    
+    .sp-years,
+    .sp-parent-ages {
+        font-size: 10px;
+    }
+    
+    .sp-couple-date {
+        font-size: 10px;
+        padding: 3px 8px;
+    }
+}
+
+/* Mobile phones */
+@media (max-width: 480px) {
+    .sp-card {
+        width: 160px;
+        min-height: 72px;
+        padding: 6px;
+    }
+    
+    .sp-avatar-wrap {
+        width: 32px;
+        height: 32px;
+    }
+    
+    .sp-name {
+        font-size: 10px;
+    }
+    
+    .sp-years {
+        font-size: 9px;
+    }
+    
+    .sp-parent-ages {
+        display: none;
+    }
+    
+    .sp-card-actions {
+        margin-top: 4px;
+        padding-top: 3px;
+    }
+    
+    .sp-couple-date {
+        font-size: 9px;
+        padding: 2px 6px;
+    }
+}
+
+/* Performance optimization with content-visibility */
+@supports (content-visibility: auto) {
+    .sp-card {
+        content-visibility: auto;
+        contain-intrinsic-size: 206px 82px;
     }
 }
 

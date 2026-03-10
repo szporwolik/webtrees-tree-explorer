@@ -119,13 +119,10 @@ class SpTreeExplorer extends InteractiveTreeModule implements ModuleGlobalInterf
         $cssNav = view("{$this->name()}::inject-style", [
             'path' => $this->assetUrl('css/navigator.css'),
         ]);
-        $jsH2c = view("{$this->name()}::inject-script", [
-            'path' => $this->assetUrl('js/html2canvas.1.4.js'),
-        ]);
         $jsNav = view("{$this->name()}::inject-script", [
             'path' => $this->assetUrl('js/navigator.js'),
         ]);
-        return $cssNav . ' ' . $jsH2c . ' ' . $jsNav;
+        return $cssNav . ' ' . $jsNav;
     }
 
     public function bodyContent(): string
@@ -145,7 +142,7 @@ class SpTreeExplorer extends InteractiveTreeModule implements ModuleGlobalInterf
 
         $map->attach('', '/tree/{tree}', static function (Map $router) {
             $router->get(SpTreeExplorerHandler::class, '/sp-tree-nav')
-                ->allows(RequestMethodInterface::METHOD_POST);
+                ->allows(RequestMethodInterface::METHOD_GET, RequestMethodInterface::METHOD_POST);
         });
 
         View::registerNamespace($this->name(), $this->resourcesFolder() . 'views/');
@@ -177,16 +174,52 @@ class SpTreeExplorer extends InteractiveTreeModule implements ModuleGlobalInterf
         }
 
         if ($individual === null) {
-            return $this->viewResponse('modules/spNavigator/diagram', [
-                'individual'  => null,
-                'cardHtml'    => '',
-                'initScript'  => '',
-                'module'      => $this->name(),
-                'title'       => I18N::translate('Tree Navigator'),
-                'pageHeading' => $this->pageHeading(),
-                'showForm'    => true,
-                'tree'        => $tree,
-            ]);
+                // Build empty viewport with search functionality
+                $prefix = 'spN01';
+                $moduleName = Validator::attributes($request)->string('module');
+            
+                $expandUrl = route(SpTreeExplorerHandler::class, [
+                    'module'   => $moduleName,
+                    'action'   => 'NodeExpand',
+                    'tree'     => $tree->name(),
+                    'rootXref' => '',
+                ]);
+
+                $searchUrl = route(SpTreeExplorerHandler::class, [
+                    'module'   => $moduleName,
+                    'action'   => 'PersonSearch',
+                    'tree'     => $tree->name(),
+                    'rootXref' => '',
+                ]);
+
+                $cardHtml = view('modules/spNavigator/viewport', [
+                    'module'      => $moduleName,
+                    'prefix'      => $prefix,
+                    'rootXref'    => '',
+                    'tree'        => $tree,
+                    'expandUrl'   => $expandUrl,
+                    'searchUrl'   => $searchUrl,
+                ]);
+
+                $jsExpandUrl = addcslashes($expandUrl, "'\\");
+                $jsSearchUrl = addcslashes($searchUrl, "'\\");
+                $emptyTreeData = json_encode(['nodes' => [], 'edges' => [], 'rootId' => null]);
+                $initScript = 'wtpInitCSSColors(); var ' . $prefix . 'Controller = new FamilyNavigator("'
+                    . $prefix . '", true, '
+                    . $emptyTreeData . ', "'
+                    . $jsExpandUrl . '", "'
+                    . $jsSearchUrl . '");';
+
+                return $this->viewResponse('modules/spNavigator/diagram', [
+                    'individual'  => null,
+                    'cardHtml'    => $cardHtml,
+                    'initScript'  => $initScript,
+                    'module'      => $this->name(),
+                    'title'       => I18N::translate('Tree Navigator'),
+                    'pageHeading' => $this->pageHeading(),
+                    'showForm'    => true,
+                    'tree'        => $tree,
+                ]);
         }
 
         $depth = 50;

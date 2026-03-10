@@ -27,7 +27,6 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 • **Search dropdown** to find and navigate to any person in the tree  
 • **Multiple marriages support** — all spouses and children from all marriages displayed  
 • **Unknown parent placeholders** — when siblings exist but parents don't, synthetic "?" boxes are created  
-• Export diagram as PNG image  
 • Print-friendly styling  
 • AJAX-powered lazy loading of tree branches  
 • Share link support for direct navigation
@@ -73,8 +72,7 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
     ├── css/
     │   └── navigator.css           # Complete module stylesheet
     ├── js/
-    │   ├── navigator.js            # Main navigation engine
-    │   └── html2canvas.1.4.js      # PNG export (MIT)
+    │   └── navigator.js            # Main navigation engine
     └── views/
         ├── inject-script.phtml
         ├── inject-style.phtml
@@ -91,12 +89,13 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 • webtrees 2.x — Genealogy application framework (GPL v3)  
 • Uses webtrees API: `Individual`, `Family`, `Tree`, `Auth`, `Registry`, `I18N`, etc.
 
-**Third-party:**  
-• [html2canvas 1.4.1](https://html2canvas.hertzen.com/) (MIT License) — PNG export functionality
-
 **JavaScript:**  
 • Native ES6+ JavaScript (no external frameworks required)  
 • Uses standard browser APIs: Canvas, Fetch, DOM manipulation
+
+## Roadmap / Future Features
+
+• **PNG export** — Diagram export to image file (planned for future release)
 
 ## Contributing
 

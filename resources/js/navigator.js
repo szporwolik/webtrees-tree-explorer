@@ -4,6 +4,48 @@
  * Copyright (C) 2025-2026 Szymon Porwolik
  */
 
+/**
+ * CSS color tokens cache - initialized once from CSS custom properties
+ * Provides theme-portable colors for inline SVG generation
+ */
+var wtpCSSColors = {
+    ringBrokenFill: '#f1f3f5',
+    ringBrokenStroke: '#c5c9d1',
+    divorceLine: '#e74c3c',
+    ringFemaleFill: '#fce7f3',
+    ringFemaleStroke: '#f3a2cb',
+    ringMaleFill: '#e0f7ff',
+    ringMaleStroke: '#61d8f0',
+    heartFill: '#f3bfd1',
+    heartStroke: '#e8a0b8',
+    connectorLine: '#c0c6d0'
+};
+
+/**
+ * Initialize CSS color tokens from computed styles
+ * Attempts to read from .wtp-plugin-root, falls back to document root
+ */
+function wtpInitCSSColors() {
+    var root = document.querySelector('.wtp-plugin-root') || document.documentElement;
+    var styles = getComputedStyle(root);
+    
+    function readToken(name, fallback) {
+        var value = styles.getPropertyValue(name).trim();
+        return value || fallback;
+    }
+    
+    wtpCSSColors.ringBrokenFill = readToken('--wtp-ring-broken-fill', '#f1f3f5');
+    wtpCSSColors.ringBrokenStroke = readToken('--wtp-ring-broken-stroke', '#c5c9d1');
+    wtpCSSColors.divorceLine = readToken('--wtp-divorce-line', '#e74c3c');
+    wtpCSSColors.ringFemaleFill = readToken('--wtp-ring-female-fill', '#fce7f3');
+    wtpCSSColors.ringFemaleStroke = readToken('--wtp-ring-female-stroke', '#f3a2cb');
+    wtpCSSColors.ringMaleFill = readToken('--wtp-ring-male-fill', '#e0f7ff');
+    wtpCSSColors.ringMaleStroke = readToken('--wtp-ring-male-stroke', '#61d8f0');
+    wtpCSSColors.heartFill = readToken('--wtp-heart-fill', '#f3bfd1');
+    wtpCSSColors.heartStroke = readToken('--wtp-heart-stroke', '#e8a0b8');
+    wtpCSSColors.connectorLine = readToken('--wtp-connector-line', '#c0c6d0');
+}
+
 // eslint-disable-next-line no-unused-vars
 function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchUrl) {
     var nav = this;
@@ -18,6 +60,11 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.container      = document.getElementById(cardPrefix + '_wrap');
     this.canvas         = document.getElementById(cardPrefix + '_canvas');
     this.connCanvas     = document.getElementById(cardPrefix + '_connCanvas');
+
+    // Floating icon overlay — sits outside overflow:hidden container
+    this.iconOverlay    = null;
+    this.iconCanvas     = null;
+    this._createIconOverlay();
     this.loaderIcon     = document.getElementById(cardPrefix + '_loader');
     this.toolbar        = document.getElementById(cardPrefix + '_toolbar');
     this.overlay        = document.getElementById(cardPrefix + '_overlay');
@@ -27,6 +74,8 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
 
     // Selected person xref from search
     this.selectedXref   = '';
+    this.latestSearchResults = [];
+    this.searchLookup = {};
 
     // Zoom / pan state
     this.zoomLevel      = 1.0;
@@ -41,8 +90,8 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.CARD_H         = 82;   // approximate card height
     this.COUPLE_GAP     = 36;   // gap between person card and spouse card (couple-line with rings/dates)
     this.H_GAP          = 24;   // horizontal gap between sibling subtrees
-    this.FAMILY_GROUP_GAP = 72; // extra spacing between children from different marriages
-    this.MULTI_SPOUSE_SEP = 28; // extra visual gap before each additional spouse group
+    this.FAMILY_GROUP_GAP = 84; // extra spacing between children from different marriages
+    this.MULTI_SPOUSE_SEP = 34; // extra visual gap before each additional spouse group
     this.V_GAP          = 76;   // vertical gap between generations (global spacing to preserve same-level generations)
     this.CHILD_TOP_CLEARANCE = 6; // clearance above child card so connector doesn't touch
     this.FORK_SOURCE_OFFSET = 0; // keep fork continuous with couple-line to avoid visible gaps
@@ -85,6 +134,34 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     }
     this.hideOverlay();
 }
+
+/**
+ * Create the icon overlay layer (sibling of container, not clipped).
+ */
+FamilyNavigator.prototype._createIconOverlay = function () {
+    if (!this.container || !this.container.parentNode) return;
+    var overlay = document.createElement('div');
+    overlay.className = 'sp-icon-overlay';
+    var inner = document.createElement('div');
+    inner.className = 'sp-icon-overlay-canvas';
+    overlay.appendChild(inner);
+    // Insert right after the navigator container (sibling, not clipped)
+    this.container.parentNode.insertBefore(overlay, this.container.nextSibling);
+    this.iconOverlay = overlay;
+    this.iconCanvas = inner;
+    this._syncIconOverlayBounds();
+};
+
+/**
+ * Match overlay bounds to the navigator container.
+ */
+FamilyNavigator.prototype._syncIconOverlayBounds = function () {
+    if (!this.iconOverlay || !this.container) return;
+    this.iconOverlay.style.top = this.container.offsetTop + 'px';
+    this.iconOverlay.style.left = this.container.offsetLeft + 'px';
+    this.iconOverlay.style.width = this.container.offsetWidth + 'px';
+    this.iconOverlay.style.height = this.container.offsetHeight + 'px';
+};
 
 // ==========================================================================
 // INDEX BUILDING — build adjacency maps from flat node/edge arrays
@@ -600,6 +677,9 @@ FamilyNavigator.prototype.render = function () {
 
     // Draw connectors on canvas
     this.drawConnectors(canvasW, canvasH);
+
+    // Render floating ancestor icons in overlay
+    this._renderIconOverlay(canvasW, canvasH);
 };
 
 /**
@@ -683,18 +763,16 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
         }
     }
 
-    // Person card: show navigate icon when ancestors not visible above
+    // Store ancestor-icon metadata on the wrapper for overlay rendering
+    wrapper._ancestorIcons = [];
     if (personHasParents && !personAncestorsVisible) {
-        personCard.appendChild(this.createNavigateIcon(node.person.xref));
+        wrapper._ancestorIcons.push({ xref: node.person.xref, target: 'person' });
     }
-
-    // Spouse cards: show navigate icon when spouse has parents not visible above
     for (var si = 0; si < spouseCards.length; si++) {
         var sc = spouseCards[si];
         if (sc.family.spouse && sc.family.spouseHasParents) {
-            // Only first spouse (index 0) gets ancestor-line support for now
             if (si === 0 && spouseAncestorsVisible) continue;
-            sc.card.appendChild(this.createNavigateIcon(sc.family.spouse.xref));
+            wrapper._ancestorIcons.push({ xref: sc.family.spouse.xref, target: 'spouse', index: si });
         }
     }
 
@@ -747,13 +825,12 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         img.loading = 'lazy';
         avatarWrap.appendChild(img);
     } else {
-        // Gender-based silhouette placeholder
-        var silClass = personData.sex === 'F' ? 'sp-silhouette-f' : (personData.sex === 'M' ? 'sp-silhouette-m' : 'sp-silhouette-u');
-        avatarWrap.classList.add(silClass);
+        // Neutral camera placeholder for quick "click to upload" affordance
+        avatarWrap.classList.add('sp-avatar-placeholder');
     }
     person.appendChild(avatarWrap);
 
-    // Info (name + years)
+    // Info (name + dates + parent ages at birth)
     var info = document.createElement('div');
     info.className = 'sp-info';
 
@@ -761,13 +838,78 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     nameLink.className = 'sp-name';
     nameLink.href = personData.url;
     nameLink.target = '_blank';
-    nameLink.textContent = personData.name;
+    nameLink.rel = 'noopener';
+    nameLink.setAttribute('aria-label', 'View ' + personData.name + ' profile');
+    
+    var nameStrong = document.createElement('strong');
+    nameStrong.textContent = personData.name;
+    nameLink.appendChild(nameStrong);
     info.appendChild(nameLink);
 
     var years = document.createElement('span');
     years.className = 'sp-years';
-    years.innerHTML = personData.years || '';
+    years.textContent = personData.dateLine || personData.years || '';
+    if (personData.dateLineQuality) {
+        years.classList.add('sp-years-' + personData.dateLineQuality);
+    }
+
+    var placeTitleParts = [];
+    if (personData.birthPlace) placeTitleParts.push('Birth place: ' + personData.birthPlace);
+    if (personData.deathPlace) placeTitleParts.push('Death place: ' + personData.deathPlace);
+    if (placeTitleParts.length > 0) {
+        years.title = placeTitleParts.join(' | ');
+        var placeMarker = document.createElement('span');
+        placeMarker.className = 'sp-place-marker';
+        placeMarker.textContent = '\u2022';
+        placeMarker.setAttribute('aria-hidden', 'true');
+        years.appendChild(placeMarker);
+    }
     info.appendChild(years);
+
+    var hasFatherAge = Number.isFinite(personData.fatherAgeAtBirth);
+    var hasMotherAge = Number.isFinite(personData.motherAgeAtBirth);
+    if (hasFatherAge || hasMotherAge) {
+        var parentAges = document.createElement('span');
+        parentAges.className = 'sp-parent-ages';
+
+        if (hasFatherAge) {
+            var fatherAge = document.createElement('span');
+            fatherAge.className = 'sp-parent-age sp-parent-age-father';
+            fatherAge.title = 'Father\'s age at birth: ' + personData.fatherAgeAtBirth;
+
+            var fatherIcon = document.createElement('span');
+            fatherIcon.className = 'sp-parent-age-icon';
+            fatherIcon.textContent = '\u2642';
+
+            var fatherValue = document.createElement('span');
+            fatherValue.className = 'sp-parent-age-value';
+            fatherValue.textContent = String(personData.fatherAgeAtBirth);
+
+            fatherAge.appendChild(fatherIcon);
+            fatherAge.appendChild(fatherValue);
+            parentAges.appendChild(fatherAge);
+        }
+
+        if (hasMotherAge) {
+            var motherAge = document.createElement('span');
+            motherAge.className = 'sp-parent-age sp-parent-age-mother';
+            motherAge.title = 'Mother\'s age at birth: ' + personData.motherAgeAtBirth;
+
+            var motherIcon = document.createElement('span');
+            motherIcon.className = 'sp-parent-age-icon';
+            motherIcon.textContent = '\u2640';
+
+            var motherValue = document.createElement('span');
+            motherValue.className = 'sp-parent-age-value';
+            motherValue.textContent = String(personData.motherAgeAtBirth);
+
+            motherAge.appendChild(motherIcon);
+            motherAge.appendChild(motherValue);
+            parentAges.appendChild(motherAge);
+        }
+
+        info.appendChild(parentAges);
+    }
 
     person.appendChild(info);
     card.appendChild(person);
@@ -775,10 +917,51 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     // Actions row
     var actions = document.createElement('div');
     actions.className = 'sp-card-actions';
+
+    var actionsLeft = document.createElement('div');
+    actionsLeft.className = 'sp-card-actions-left';
+
+    function quickAction(url, label, glyph) {
+        if (!url) return null;
+        var link = document.createElement('a');
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.className = 'sp-card-action-link';
+        link.title = label;
+        link.setAttribute('aria-label', label + ' for ' + personData.name);
+        link.textContent = glyph;
+        return link;
+    }
+
+    var addSourceLink = quickAction(personData.addSourceUrl, 'Add source', 'S');
+    var addNoteLink = quickAction(personData.addNoteUrl, 'Add note', 'N');
+    var addMediaLink = quickAction(personData.addMediaUrl, 'Add media', 'M');
+    if (addSourceLink) actionsLeft.appendChild(addSourceLink);
+    if (addNoteLink) actionsLeft.appendChild(addNoteLink);
+    if (addMediaLink) actionsLeft.appendChild(addMediaLink);
+
+    var counters = document.createElement('span');
+    counters.className = 'sp-card-counters';
+    var sourceCount = Number.isFinite(personData.sourceCount) ? personData.sourceCount : 0;
+    var noteCount = Number.isFinite(personData.noteCount) ? personData.noteCount : 0;
+    counters.textContent = 'S:' + sourceCount + ' N:' + noteCount;
+    counters.title = 'Sources: ' + sourceCount + ' | Notes: ' + noteCount;
+    actionsLeft.appendChild(counters);
+
+    actions.appendChild(actionsLeft);
+
+    var actionsRight = document.createElement('div');
+    actionsRight.className = 'sp-card-actions-right';
     var viewLink = document.createElement('a');
     viewLink.href = personData.url;
+    viewLink.target = '_blank';
+    viewLink.rel = 'noopener';
     viewLink.innerHTML = '&#x270E;';
-    actions.appendChild(viewLink);
+    viewLink.title = 'Edit person';
+    viewLink.setAttribute('aria-label', 'Edit ' + personData.name);
+    actionsRight.appendChild(viewLink);
+    actions.appendChild(actionsRight);
     card.appendChild(actions);
 
     return card;
@@ -791,6 +974,9 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
     var lineEl = document.createElement('div');
     lineEl.className = 'sp-couple-line';
     lineEl.dataset.familyIndex = familyIndex;
+    if (familyData.hasNextRelationship) {
+        lineEl.classList.add('sp-couple-has-next');
+    }
 
     // In multi-marriage rows, keep markers compact and move full dates to tooltip.
     var compactMode = (familyCount || 1) > 1;
@@ -832,7 +1018,23 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
     else tipParts.push('Partnership');
     if (familyData.marriageDate) tipParts.push('Marriage: ' + familyData.marriageDate);
     if (familyData.divorceDate) tipParts.push('Divorce: ' + familyData.divorceDate);
+    if (familyData.marriagePlace) tipParts.push('Marriage place: ' + familyData.marriagePlace);
+    if (familyData.divorcePlace) tipParts.push('Divorce place: ' + familyData.divorcePlace);
+    if (familyData.durationLabel) tipParts.push('Duration: ' + familyData.durationLabel);
+    if (Number.isFinite(familyData.familySourceCount) || Number.isFinite(familyData.familyNoteCount)) {
+        tipParts.push('Family sources: ' + (familyData.familySourceCount || 0));
+        tipParts.push('Family notes: ' + (familyData.familyNoteCount || 0));
+    }
     lineEl.title = tipParts.join(' | ');
+
+    function appendFamilyMetrics() {
+        if (compactMode) return;
+        if (!Number.isFinite(familyData.familySourceCount) && !Number.isFinite(familyData.familyNoteCount)) return;
+        var metrics = document.createElement('span');
+        metrics.className = 'sp-couple-metrics';
+        metrics.textContent = 'S:' + (familyData.familySourceCount || 0) + ' N:' + (familyData.familyNoteCount || 0);
+        lineEl.appendChild(metrics);
+    }
 
     if (isDivorced) {
         // Divorced layout: top date / broken rings / bottom date.
@@ -843,40 +1045,84 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
             var mDate = document.createElement('span');
             mDate.className = 'sp-couple-date sp-couple-date-top';
             mDate.textContent = familyData.marriageDate;
-            mDate.title = familyData.marriageDate;
+            if (familyData.marriageQuality) {
+                mDate.classList.add('sp-couple-date-' + familyData.marriageQuality);
+            }
+            if (familyData.marriagePlace) {
+                mDate.classList.add('sp-couple-date-has-place');
+                mDate.title = familyData.marriageDate + ' | ' + familyData.marriagePlace;
+            } else {
+                mDate.title = familyData.marriageDate;
+            }
             lineEl.appendChild(mDate);
         }
 
         var brokenRings = document.createElement('span');
         brokenRings.className = 'sp-couple-rings sp-rings-broken';
-        brokenRings.innerHTML = '<svg viewBox="0 0 24 14" width="20" height="12"><circle cx="8" cy="7" r="5" fill="none" stroke="#ccc" stroke-width="1.5"/><circle cx="16" cy="7" r="5" fill="none" stroke="#ccc" stroke-width="1.5"/><line x1="4" y1="2" x2="20" y2="12" stroke="#e74c3c" stroke-width="1.5"/></svg>';
+        brokenRings.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.ringBrokenFill + '" fill-opacity="0.45" stroke="' + wtpCSSColors.ringBrokenStroke + '" stroke-width="1.8"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.ringBrokenFill + '" fill-opacity="0.45" stroke="' + wtpCSSColors.ringBrokenStroke + '" stroke-width="1.8"/><line x1="4" y1="2" x2="20" y2="12" stroke="' + wtpCSSColors.divorceLine + '" stroke-width="1.7"/></svg>';
         lineEl.appendChild(brokenRings);
 
         if (!compactMode && familyData.divorceDate) {
             var dDate = document.createElement('span');
             dDate.className = 'sp-couple-date sp-divorce-date sp-couple-date-bottom';
             dDate.textContent = familyData.divorceDate;
-            dDate.title = familyData.divorceDate;
+            if (familyData.divorceQuality) {
+                dDate.classList.add('sp-couple-date-' + familyData.divorceQuality);
+            }
+            if (familyData.divorcePlace) {
+                dDate.classList.add('sp-couple-date-has-place');
+                dDate.title = familyData.divorceDate + ' | ' + familyData.divorcePlace;
+            } else {
+                dDate.title = familyData.divorceDate;
+            }
             lineEl.appendChild(dDate);
+
+            if (familyData.durationLabel) {
+                var dDuration = document.createElement('span');
+                dDuration.className = 'sp-couple-duration';
+                dDuration.textContent = familyData.durationLabel;
+                dDuration.title = 'Relationship duration: ' + familyData.durationLabel;
+                lineEl.appendChild(dDuration);
+            }
+
+            appendFamilyMetrics();
         }
     } else if (isMarried) {
         // Married layout: rings + optional date
         var rings = document.createElement('span');
         rings.className = 'sp-couple-rings';
-        rings.innerHTML = '<svg viewBox="0 0 24 14" width="20" height="12"><circle cx="8" cy="7" r="5" fill="none" stroke="#f9a8d4" stroke-width="1.5"/><circle cx="16" cy="7" r="5" fill="none" stroke="#67e8f9" stroke-width="1.5"/></svg>';
+        rings.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.ringFemaleFill + '" fill-opacity="0.55" stroke="' + wtpCSSColors.ringFemaleStroke + '" stroke-width="1.8"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.ringMaleFill + '" fill-opacity="0.55" stroke="' + wtpCSSColors.ringMaleStroke + '" stroke-width="1.8"/></svg>';
         lineEl.appendChild(rings);
         if (!compactMode && familyData.marriageDate) {
             var mDate = document.createElement('span');
             mDate.className = 'sp-couple-date';
             mDate.textContent = familyData.marriageDate;
+            if (familyData.marriageQuality) {
+                mDate.classList.add('sp-couple-date-' + familyData.marriageQuality);
+            }
+            if (familyData.marriagePlace) {
+                mDate.classList.add('sp-couple-date-has-place');
+                mDate.title = familyData.marriageDate + ' | ' + familyData.marriagePlace;
+            }
             lineEl.appendChild(mDate);
+
+            if (familyData.durationLabel) {
+                var mDuration = document.createElement('span');
+                mDuration.className = 'sp-couple-duration';
+                mDuration.textContent = familyData.durationLabel;
+                mDuration.title = 'Relationship duration: ' + familyData.durationLabel;
+                lineEl.appendChild(mDuration);
+            }
+
+            appendFamilyMetrics();
         }
     } else {
         // Unmarried couple — heart icon, no rings
         var heart = document.createElement('span');
         heart.className = 'sp-couple-rings';
-        heart.innerHTML = '<svg viewBox="0 0 20 18" width="16" height="14"><path d="M10 17s-7-4.35-7-10A4 4 0 0 1 10 4a4 4 0 0 1 7 3c0 5.65-7 10-7 10z" fill="none" stroke="#e8a0b8" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+        heart.innerHTML = '<svg viewBox="0 0 20 18" width="48" height="42"><path d="M10 17s-7-4.35-7-10A4 4 0 0 1 10 4a4 4 0 0 1 7 3c0 5.65-7 10-7 10z" fill="' + wtpCSSColors.heartFill + '" fill-opacity="0.72" stroke="' + wtpCSSColors.heartStroke + '" stroke-width="1.5" stroke-linejoin="round"/></svg>';
         lineEl.appendChild(heart);
+        appendFamilyMetrics();
     }
 
     return lineEl;
@@ -907,20 +1153,83 @@ FamilyNavigator.prototype.createAncestorTreeIcon = function (nodeId, lineIndex) 
 };
 
 /**
+ * Render ancestor tree icons into the floating overlay (not clipped by viewport).
+ */
+FamilyNavigator.prototype._renderIconOverlay = function (canvasW, canvasH) {
+    if (!this.iconCanvas) return;
+    this._syncIconOverlayBounds();
+    this.iconCanvas.innerHTML = '';
+    this.iconCanvas.style.width = canvasW + 'px';
+    this.iconCanvas.style.height = canvasH + 'px';
+
+    var nav = this;
+    for (var id in this.cardElements) {
+        var el = this.cardElements[id];
+        if (!el._ancestorIcons || el._ancestorIcons.length === 0) continue;
+        var layout = this.layoutMap[id];
+        if (!layout || layout.x === undefined) continue;
+
+        // Find person card and spouse cards within the wrapper
+        var cards = el.querySelectorAll('.sp-card');
+        for (var ai = 0; ai < el._ancestorIcons.length; ai++) {
+            var info = el._ancestorIcons[ai];
+            // Determine which card it belongs to
+            var targetCard;
+            if (info.target === 'person') {
+                targetCard = cards[0];
+            } else {
+                // Spouse card: person card is [0], spouse cards start at [1]
+                targetCard = cards[1 + (info.index || 0)];
+            }
+            if (!targetCard) continue;
+
+            // Position icon above the target card's top-right corner
+            var cardLeft = targetCard.offsetLeft + parseFloat(el.style.left);
+            var cardTop = targetCard.offsetTop + parseFloat(el.style.top);
+            var iconX = cardLeft + targetCard.offsetWidth - 28;
+            var iconY = cardTop - 27;
+
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'sp-ancestor-expand';
+            btn.title = 'Navigate to ancestors';
+            btn.innerHTML = '<svg viewBox="0 0 24 32" width="22" height="26" aria-hidden="true">'
+                + '<rect x="10.5" y="20" width="3" height="12" rx="1" fill="#8B5E3C"/>'
+                + '<ellipse cx="12" cy="12" rx="9" ry="10" fill="#4aa94e"/>'
+                + '<ellipse cx="7" cy="10" rx="5" ry="6" fill="#5cc460"/>'
+                + '<ellipse cx="17" cy="10" rx="5" ry="6" fill="#5cc460"/>'
+                + '<ellipse cx="12" cy="7" rx="5" ry="5.5" fill="#6fd672"/>'
+                + '</svg>';
+            btn.style.position = 'absolute';
+            btn.style.left = iconX + 'px';
+            btn.style.top = iconY + 'px';
+            (function(xref) {
+                btn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    nav.navigateTo(xref);
+                });
+            })(info.xref);
+            this.iconCanvas.appendChild(btn);
+        }
+    }
+};
+
+/**
  * Create a navigation icon — click to re-center the tree on this person.
+ * (Legacy — no longer appended to cards, icons are in the overlay layer.)
  */
 FamilyNavigator.prototype.createNavigateIcon = function (xref) {
     var nav = this;
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'sp-ancestor-tree-btn sp-ancestor-expand';
-    btn.title = 'Navigate to this person';
-    btn.innerHTML = '<svg viewBox="0 0 20 20" width="18" height="18">'
-        + '<line x1="10" y1="20" x2="10" y2="7" stroke="currentColor" stroke-width="2"/>'
-        + '<line x1="10" y1="9" x2="4" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'
-        + '<line x1="10" y1="9" x2="16" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'
-        + '<circle cx="4" cy="3" r="2" fill="currentColor"/>'
-        + '<circle cx="16" cy="3" r="2" fill="currentColor"/>'
+    btn.title = 'Navigate to ancestors';
+    btn.innerHTML = '<svg viewBox="0 0 24 32" width="22" height="26" aria-hidden="true">'
+        + '<rect x="10.5" y="20" width="3" height="12" rx="1" fill="#8B5E3C"/>'
+        + '<ellipse cx="12" cy="12" rx="9" ry="10" fill="#4aa94e"/>'
+        + '<ellipse cx="7" cy="10" rx="5" ry="6" fill="#5cc460"/>'
+        + '<ellipse cx="17" cy="10" rx="5" ry="6" fill="#5cc460"/>'
+        + '<ellipse cx="12" cy="7" rx="5" ry="5.5" fill="#6fd672"/>'
         + '</svg>';
     btn.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -1024,9 +1333,21 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, canvasW, canvasH);
 
-    ctx.strokeStyle = '#c0c6d0';
-    ctx.fillStyle = '#c0c6d0';
-    ctx.lineWidth = 2;
+    // Use theme-portable color from CSS token
+    var connectorColor = wtpCSSColors.connectorLine;
+    
+    ctx.strokeStyle = connectorColor;
+    ctx.fillStyle = connectorColor;
+    var desiredLineWidth = 2;
+    var lineWidthDev = Math.max(1, Math.round(desiredLineWidth * dpr));
+    ctx.lineWidth = lineWidthDev / dpr;
+    // For odd device-pixel widths, center lines on half-pixels; for even widths, on integers.
+    var snapOffsetDev = (lineWidthDev % 2 === 1) ? 0.5 : 0;
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    
     // Use butt caps so line ends don't protrude past endpoints.
     // Rounded appearance is provided by joins and explicit endpoint dots.
     ctx.lineCap = 'butt';
@@ -1035,9 +1356,12 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
     var R = 8; // corner radius for rounded connectors
     var dotRadius = 4; // Small circle radius at connection points
     var self = this;
+    function snap(v) { return (Math.round(v * dpr) + snapOffsetDev) / dpr; }
 
     // Helper to draw a small filled circle
     function drawDot(x, y) {
+        x = snap(x);
+        y = snap(y);
         ctx.beginPath();
         ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
         ctx.fill();
@@ -1069,7 +1393,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         
         var personCardRect = personCard.getBoundingClientRect();
         // Person's right edge X coordinate
-        var personRightX = layout.x + (personCardRect.right - wrapperRect.left) / this.zoomLevel;
+        var personRightX = snap(layout.x + (personCardRect.right - wrapperRect.left) / this.zoomLevel);
         
         // Stagger divorce connectors vertically - each spouse at different Y level
         // Spread up to 5 spouses across wider vertical range for better visual separation
@@ -1084,14 +1408,14 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         for (var fi = 0; fi < coupleLines.length; fi++) {
             // Stagger Y position: center ± offset based on family index
             var offset = (fi - (familyCount - 1) / 2) * verticalSpacing;
-            var connectorY = centerY + offset;
+            var connectorY = snap(centerY + offset);
             
             // Store offset for child fork drawing
             staggeredOffsets[nodeId][fi] = offset;
             
-            // For multi-marriage, hide CSS vertical drops and draw everything on canvas
+            // Keep couple drops rendered on canvas for consistent connector color.
             var lineEl = coupleLines[fi];
-            if (lineEl && familyCount > 1) {
+            if (lineEl) {
                 lineEl.classList.add('sp-couple-line-staggered');
             }
             
@@ -1101,7 +1425,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             
             var spouseCardRect = spouseCard.getBoundingClientRect();
             // Spouse's left edge X coordinate
-            var spouseLeftX = layout.x + (spouseCardRect.left - wrapperRect.left) / this.zoomLevel;
+            var spouseLeftX = snap(layout.x + (spouseCardRect.left - wrapperRect.left) / this.zoomLevel);
             
             // Endpoints exactly on card borders (dots are centered here).
             var lineStartX = personRightX;
@@ -1117,21 +1441,18 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             drawDot(personRightX, connectorY);
             drawDot(spouseLeftX, connectorY);
             
-            // For multi-marriage, draw vertical drop on canvas (CSS ::after is hidden)
-            if (familyCount > 1) {
-                // Find where couple-line element is and draw down from connectorY
-                var lineEl = coupleLines[fi];
-                if (lineEl) {
-                    var lineRect = lineEl.getBoundingClientRect();
-                    var dropStartY = connectorY - 1;
-                    var dropEndY = layout.y + ((lineRect.bottom - wrapperRect.top) / this.zoomLevel) + offset;
-                    var dropX = layout.x + ((lineRect.left + lineRect.width / 2) - wrapperRect.left) / this.zoomLevel;
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(dropX, dropStartY);
-                    ctx.lineTo(dropX, dropEndY);
-                    ctx.stroke();
-                }
+            // Draw vertical couple drop on canvas for all families.
+            // Skip families marked with no children.
+            if (lineEl && !lineEl.classList.contains('sp-couple-no-children')) {
+                var lineRect = lineEl.getBoundingClientRect();
+                var dropStartY = snap(connectorY - 1);
+                var dropEndY = snap(layout.y + ((lineRect.bottom - wrapperRect.top) / this.zoomLevel) + offset);
+                var dropX = snap(layout.x + ((lineRect.left + lineRect.width / 2) - wrapperRect.left) / this.zoomLevel);
+
+                ctx.beginPath();
+                ctx.moveTo(dropX, dropStartY);
+                ctx.lineTo(dropX, dropEndY);
+                ctx.stroke();
             }
         }
     }
@@ -1278,7 +1599,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
                     // Move secondary families upward from the baseline branch.
                     barRatio = Math.max(0.16, 0.30 - offsetIdx * 0.08);
                 }
-                this.drawFork(ctx, srcX, famSrcY, targets, R, barRatio);
+                this.drawFork(ctx, srcX, famSrcY, targets, R, barRatio, dpr, snapOffsetDev);
             }
         }
 
@@ -1307,7 +1628,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
                 }
             }
             if (targets.length > 0) {
-                this.drawFork(ctx, defSrcX, defSrcY, targets, R);
+                this.drawFork(ctx, defSrcX, defSrcY, targets, R, undefined, dpr, snapOffsetDev);
             }
         }
     }
@@ -1317,11 +1638,19 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
  * Draw a fork connector: one source at top, branching down to multiple targets.
  * Uses rounded corners for a polished look.
  */
-FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barYRatio) {
+FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barYRatio, dpr, snapOffsetDev) {
     if (targets.length === 0) return;
     if (barYRatio === undefined) barYRatio = 0.5;
 
     var dotRadius = 4; // Small circle radius at connection points
+    if (!dpr || dpr <= 0) dpr = window.devicePixelRatio || 1;
+    if (snapOffsetDev === undefined) {
+        var lineWidthDev = Math.max(1, Math.round(ctx.lineWidth * dpr));
+        snapOffsetDev = (lineWidthDev % 2 === 1) ? 0.5 : 0;
+    }
+    function snap(v) { return (Math.round(v * dpr) + snapOffsetDev) / dpr; }
+    srcX = snap(srcX);
+    srcY = snap(srcY);
 
     // Bar Y = positioned between source bottom and nearest target top
     var nearestY = targets[0].y;
@@ -1356,10 +1685,12 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
         if (barY < srcY + 3) barY = srcY + 3;
     }
 
-    barY = Math.round(barY);
+    barY = snap(barY);
 
     // Helper: draw a small filled circle
     function drawDot(x, y) {
+        x = snap(x);
+        y = snap(y);
         ctx.beginPath();
         ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
         ctx.fill();
@@ -1377,8 +1708,8 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
 
     // Single child offset — L-shape with rounded corners (arcTo for consistency)
     if (targets.length === 1) {
-        var tx = targets[0].x;
-        var ty = targets[0].y;
+        var tx = snap(targets[0].x);
+        var ty = snap(targets[0].y);
         var dir = tx > srcX ? 1 : -1;
         var r = Math.min(R, Math.abs(tx - srcX) / 2, Math.abs(barY - srcY), Math.abs(ty - barY));
         if (Math.abs(tx - srcX) > 3 && Math.abs(barY - srcY) > 6 && Math.abs(ty - barY) > 6) {
@@ -1418,8 +1749,8 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
     // Compute where each drop/elbow actually starts on the bar, so the bar
     // doesn't extend past rounded corners and create a "too long" look.
     for (var bi = 0; bi < targets.length; bi++) {
-        var btx = targets[bi].x;
-        var bty = targets[bi].y;
+        var btx = snap(targets[bi].x);
+        var bty = snap(targets[bi].y);
         var bdx = btx - srcX;
         var bdir = bdx > 0 ? 1 : (bdx < 0 ? -1 : 0);
         var br = Math.min(R, Math.abs(bdx), Math.abs(bty - barY));
@@ -1476,8 +1807,8 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
 
     // Individual drops to each child with same rounded elbow style.
     for (var i = 0; i < targets.length; i++) {
-        var tx = targets[i].x;
-        var ty = targets[i].y;
+        var tx = snap(targets[i].x);
+        var ty = snap(targets[i].y);
         var dx = tx - srcX;
         var dir = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
         var r = Math.min(R, Math.abs(dx), Math.abs(ty - barY));
@@ -1832,12 +2163,18 @@ FamilyNavigator.prototype.initPanZoom = function () {
  * Apply current zoom/pan as CSS transform on the canvas and connector canvas.
  */
 FamilyNavigator.prototype.applyTransform = function () {
-    var transformStr = 'translate(' + this.panX + 'px, ' + this.panY + 'px) scale(' + this.zoomLevel + ')';
+    var dpr = window.devicePixelRatio || 1;
+    var snappedPanX = Math.round(this.panX * dpr) / dpr;
+    var snappedPanY = Math.round(this.panY * dpr) / dpr;
+    var transformStr = 'translate(' + snappedPanX + 'px, ' + snappedPanY + 'px) scale(' + this.zoomLevel + ')';
     if (this.canvas) {
         this.canvas.style.transform = transformStr;
     }
     if (this.connCanvas) {
         this.connCanvas.style.transform = transformStr;
+    }
+    if (this.iconCanvas) {
+        this.iconCanvas.style.transform = transformStr;
     }
 
     // Update zoom display
@@ -1886,13 +2223,6 @@ FamilyNavigator.prototype.initToolbar = function () {
         });
     }
 
-    var btnExport = document.getElementById(prefix + '_btnExport');
-    if (btnExport) {
-        btnExport.addEventListener('click', function () {
-            nav.exportPng();
-        });
-    }
-
     var btnShare = document.getElementById(prefix + '_btnShare');
     if (btnShare) {
         btnShare.addEventListener('click', function () {
@@ -1911,11 +2241,28 @@ FamilyNavigator.prototype.initSearch = function () {
 
     if (!this.searchInput || !this.searchResults || !this.btnGo) return;
 
+    // Native fallback suggestions (works even if custom popup is hidden by theme CSS)
+    var datalistId = this.cardPrefix + '_searchDatalist';
+    var datalistEl = document.getElementById(datalistId);
+    if (!datalistEl) {
+        datalistEl = document.createElement('datalist');
+        datalistEl.id = datalistId;
+        document.body.appendChild(datalistEl);
+    }
+    this.searchDatalist = datalistEl;
+    this.searchInput.setAttribute('list', datalistId);
+
     // Input handler with debounce
     this.searchInput.addEventListener('input', function () {
         var query = nav.searchInput.value.trim();
         nav.selectedXref = '';
         nav.btnGo.disabled = true;
+
+        // If user picked a native datalist option, resolve xref immediately
+        if (nav.searchLookup[query]) {
+            nav.selectedXref = nav.searchLookup[query].xref;
+            nav.btnGo.disabled = false;
+        }
 
         if (searchTimeout) clearTimeout(searchTimeout);
 
@@ -1939,9 +2286,7 @@ FamilyNavigator.prototype.initSearch = function () {
 
     // Focus input shows results if available
     this.searchInput.addEventListener('focus', function () {
-        if (nav.searchResults.children.length > 0) {
-            nav.searchResults.classList.add('sp-show');
-        }
+        nav.searchResults.classList.remove('sp-show');
     });
 
     // Go button handler
@@ -1957,7 +2302,15 @@ FamilyNavigator.prototype.initSearch = function () {
 
     // Enter key in search input
     this.searchInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && nav.selectedXref) {
+        if (e.key !== 'Enter') return;
+
+        if (!nav.selectedXref && nav.latestSearchResults && nav.latestSearchResults.length > 0) {
+            // Fallback: allow Enter to navigate to the first matched person
+            nav.selectedXref = nav.latestSearchResults[0].xref;
+            nav.btnGo.disabled = false;
+        }
+
+        if (nav.selectedXref) {
             e.preventDefault();
             nav.btnGo.click();
         }
@@ -1975,50 +2328,69 @@ FamilyNavigator.prototype.fetchSearchResults = function (query) {
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4 && xhr.status === 200) {
             try {
-                var results = JSON.parse(xhr.responseText);
+                var results = nav._normalizeSearchResults(xhr.responseText);
+                nav.latestSearchResults = results;
                 nav.renderSearchResults(results);
             } catch (e) {
                 console.error('SP Tree Navigator: search parse error', e);
+                nav.latestSearchResults = [];
+                nav.renderSearchResults([]);
             }
         }
     };
     xhr.send();
 };
 
-FamilyNavigator.prototype.renderSearchResults = function (results) {
-    var nav = this;
-    this.searchResults.innerHTML = '';
+/**
+ * Normalize search endpoint payload to an array of {xref, name, years}.
+ * Accepts plain arrays and common wrapped object formats.
+ */
+FamilyNavigator.prototype._normalizeSearchResults = function (rawText) {
+    var parsed = JSON.parse(rawText);
 
-    if (results.length === 0) {
-        var noResult = document.createElement('div');
-        noResult.className = 'sp-search-item sp-no-result';
-        noResult.textContent = 'No results found';
-        this.searchResults.appendChild(noResult);
-        this.searchResults.classList.add('sp-show');
-        return;
+    if (Array.isArray(parsed)) {
+        return parsed;
+    }
+
+    if (parsed && Array.isArray(parsed.results)) {
+        return parsed.results;
+    }
+
+    if (parsed && Array.isArray(parsed.data)) {
+        return parsed.data;
+    }
+
+    return [];
+};
+
+FamilyNavigator.prototype.renderSearchResults = function (results) {
+    this.searchResults.innerHTML = '';
+    this.searchResults.classList.remove('sp-show');
+    this.searchLookup = {};
+
+    if (this.searchDatalist) {
+        this.searchDatalist.innerHTML = '';
+    }
+
+    if (!Array.isArray(results)) {
+        results = [];
     }
 
     for (var i = 0; i < results.length; i++) {
         var item = results[i];
-        var div = document.createElement('div');
-        div.className = 'sp-search-item';
-        div.dataset.xref = item.xref;
-        div.innerHTML = '<span class="sp-search-name">' + this._escapeHtml(item.name) + '</span>' +
-                        '<span class="sp-search-years">' + this._escapeHtml(item.years || '') + '</span>';
 
-        div.addEventListener('click', (function (xref, name) {
-            return function () {
-                nav.selectedXref = xref;
-                nav.searchInput.value = name;
-                nav.btnGo.disabled = false;
-                nav.searchResults.classList.remove('sp-show');
-            };
-        })(item.xref, item.name));
+        // Populate native datalist fallback suggestions.
+        var label = (item.name || '') + (item.years ? ' (' + item.years + ')' : '');
+        if (label) {
+            this.searchLookup[label] = { xref: item.xref, name: item.name };
+            if (this.searchDatalist) {
+                var opt = document.createElement('option');
+                opt.value = label;
+                this.searchDatalist.appendChild(opt);
+            }
+        }
 
-        this.searchResults.appendChild(div);
     }
-
-    this.searchResults.classList.add('sp-show');
 };
 
 FamilyNavigator.prototype._escapeHtml = function (str) {
@@ -2141,95 +2513,15 @@ FamilyNavigator.prototype.hideOverlay = function () {
 
 FamilyNavigator.prototype.toggleFullscreen = function () {
     var wrap = this.container;
+    var nav = this;
     if (!wrap) return;
     var chartParent = wrap.closest('.wt-chart-interactive');
     if (chartParent) {
         chartParent.classList.toggle('sp-fullview');
     }
     setTimeout(function () {
-        // Re-center after the resize
+        // Re-sync overlay and re-center after the resize
+        nav._syncIconOverlayBounds();
     }, 100);
 };
 
-// ==========================================================================
-// PNG EXPORT
-// ==========================================================================
-
-FamilyNavigator.prototype.exportPng = function () {
-    var nav = this;
-    if (!this.canvas || !this.connCanvas) return;
-
-    nav.showLoader(true);
-
-    // Calculate bounds from layout
-    var maxX = 0, maxY = 0;
-    for (var id in this.layoutMap) {
-        var l = this.layoutMap[id];
-        if (l.x !== undefined) {
-            if (l.x + l.w > maxX) maxX = l.x + l.w;
-            if (l.y + l.h > maxY) maxY = l.y + l.h;
-        }
-    }
-    var exportW = maxX + 80;
-    var exportH = maxY + 80;
-
-    // Create an offscreen canvas for compositing
-    var offscreen = document.createElement('canvas');
-    var dpr = 2; // Export at 2x for quality
-    offscreen.width = exportW * dpr;
-    offscreen.height = exportH * dpr;
-    var offCtx = offscreen.getContext('2d');
-    offCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    // Fill background
-    offCtx.fillStyle = '#f8f9fb';
-    offCtx.fillRect(0, 0, exportW, exportH);
-
-    // Draw connector lines from our connCanvas
-    offCtx.drawImage(this.connCanvas, 0, 0, exportW, exportH);
-
-    // Use html2canvas to capture the cards layer
-    if (typeof html2canvas !== 'undefined') {
-        // Save and reset transform for capture
-        var origTransform = this.canvas.style.transform;
-        var origConnTransform = this.connCanvas.style.transform;
-        this.canvas.style.transform = 'none';
-        this.connCanvas.style.transform = 'none';
-
-        if (this.toolbar) this.toolbar.style.display = 'none';
-        if (this.overlay) this.overlay.style.display = 'none';
-
-        html2canvas(this.canvas, {
-            backgroundColor: null,
-            scale: dpr,
-            useCORS: true,
-            logging: false,
-            width: exportW,
-            height: exportH,
-        }).then(function (cardCanvas) {
-            // Composite cards on top of connectors
-            offCtx.drawImage(cardCanvas, 0, 0, exportW, exportH);
-
-            // Restore
-            nav.canvas.style.transform = origTransform;
-            nav.connCanvas.style.transform = origConnTransform;
-            if (nav.toolbar) nav.toolbar.style.display = '';
-            if (nav.overlay) nav.overlay.style.display = '';
-            nav.showLoader(false);
-
-            // Download
-            var link = document.createElement('a');
-            link.download = 'family-tree.png';
-            link.href = offscreen.toDataURL('image/png');
-            link.click();
-        }).catch(function () {
-            nav.canvas.style.transform = origTransform;
-            nav.connCanvas.style.transform = origConnTransform;
-            if (nav.toolbar) nav.toolbar.style.display = '';
-            if (nav.overlay) nav.overlay.style.display = '';
-            nav.showLoader(false);
-        });
-    } else {
-        nav.showLoader(false);
-    }
-};
