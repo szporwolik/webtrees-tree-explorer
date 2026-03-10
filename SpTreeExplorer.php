@@ -15,10 +15,13 @@ use Aura\Router\Map;
 use Fig\Http\Message\RequestMethodInterface;
 use Fisharebest\Localization\Translation;
 use Fisharebest\Webtrees\Auth;
+use Fisharebest\Webtrees\FlashMessages;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Individual;
 use Fisharebest\Webtrees\Menu;
 use Fisharebest\Webtrees\Module\AbstractModule;
+use Fisharebest\Webtrees\Module\ModuleConfigInterface;
+use Fisharebest\Webtrees\Module\ModuleConfigTrait;
 use Fisharebest\Webtrees\Module\ModuleGlobalInterface;
 use Fisharebest\Webtrees\Module\ModuleGlobalTrait;
 use Fisharebest\Webtrees\Module\ModuleChartInterface;
@@ -42,10 +45,11 @@ use SpTreeExplorer\FamilyNav\Traits\DiagramChartFeature;
  * @license https://opensource.org/licenses/GPL-3.0 GNU General Public License v3.0
  */
 class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, ModuleCustomInterface,
-    ModuleChartInterface
+    ModuleChartInterface, ModuleConfigInterface
 {
     use ModuleCustomTrait;
     use ModuleGlobalTrait;
+    use ModuleConfigTrait;
     use DiagramChartFeature;
 
     public function customModuleAuthorName(): string
@@ -179,13 +183,16 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
                 ]);
 
                 $cardHtml = view('modules/spNavigator/viewport', [
-                    'module'        => $moduleName,
-                    'moduleVersion' => $this->customModuleVersion(),
-                    'prefix'        => $prefix,
-                    'rootXref'      => '',
-                    'tree'          => $tree,
-                    'expandUrl'     => $expandUrl,
-                    'searchUrl'     => $searchUrl,
+                    'module'                  => $moduleName,
+                    'moduleVersion'           => $this->customModuleVersion(),
+                    'prefix'                  => $prefix,
+                    'rootXref'                => '',
+                    'tree'                    => $tree,
+                    'expandUrl'               => $expandUrl,
+                    'searchUrl'               => $searchUrl,
+                    'defaultDetails'          => $this->getPreference('default_details', '1') === '1',
+                    'defaultAdvancedControls' => $this->getPreference('default_advanced', '1') === '1',
+                    'defaultSources'          => $this->getPreference('default_sources', '0') === '1',
                 ]);
 
                 $jsExpandUrl = addcslashes($expandUrl, "'\\");
@@ -215,6 +222,11 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
 
         $prefix = 'spN01';
         $renderer = new FamilyTreeRenderer($prefix, $moduleName, $tree, $individual->xref(), $this->customModuleVersion());
+        $renderer->setDefaults(
+            $this->getPreference('default_details', '1') === '1',
+            $this->getPreference('default_advanced', '1') === '1',
+            $this->getPreference('default_sources', '0') === '1'
+        );
         $renderer->prepare();
 
         [$cardHtml, $initScript] = $renderer->buildViewport($individual, $depth, true);
@@ -245,5 +257,37 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
             'tree'   => $tree->name(),
             'xref'   => $xref,
         ]));
+    }
+
+    /**
+     * Admin settings page (GET).
+     */
+    public function getAdminAction(): ResponseInterface
+    {
+        $this->layout = 'layouts/administration';
+
+        return $this->viewResponse($this->name() . '::modules/spNavigator/settings', [
+            'title'            => $this->title(),
+            'defaultDetails'   => $this->getPreference('default_details', '1'),
+            'defaultAdvanced'  => $this->getPreference('default_advanced', '1'),
+            'defaultSources'   => $this->getPreference('default_sources', '0'),
+        ]);
+    }
+
+    /**
+     * Admin settings page (POST).
+     */
+    public function postAdminAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $params = (array) $request->getParsedBody();
+
+        $this->setPreference('default_details', ($params['default_details'] ?? '') === '1' ? '1' : '0');
+        $this->setPreference('default_advanced', ($params['default_advanced'] ?? '') === '1' ? '1' : '0');
+        $this->setPreference('default_sources', ($params['default_sources'] ?? '') === '1' ? '1' : '0');
+
+        $message = I18N::translate('The preferences for the module "%s" have been updated.', $this->title());
+        FlashMessages::addMessage($message, 'success');
+
+        return redirect($this->getConfigLink());
     }
 }

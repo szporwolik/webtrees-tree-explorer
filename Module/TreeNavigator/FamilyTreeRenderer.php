@@ -54,6 +54,15 @@ class FamilyTreeRenderer
     /** @var int Unique node id counter */
     private int $nodeIdCounter = 0;
 
+    /** @var bool Default state for the Details toggle */
+    private bool $defaultDetails = true;
+
+    /** @var bool Default state for the Advanced Controls toggle */
+    private bool $defaultAdvancedControls = true;
+
+    /** @var bool Default state for the Sources toggle */
+    private bool $defaultSources = false;
+
     public function __construct(string $prefix, string $moduleName, Tree $tree, string $rootXref, string $moduleVersion = '')
     {
         $this->prefix     = $prefix;
@@ -62,6 +71,13 @@ class FamilyTreeRenderer
         $this->tree       = $tree;
         $this->rootXref   = $rootXref;
         $this->nodeSeq    = 0;
+    }
+
+    public function setDefaults(bool $details, bool $advancedControls, bool $sources = false): void
+    {
+        $this->defaultDetails = $details;
+        $this->defaultAdvancedControls = $advancedControls;
+        $this->defaultSources = $sources;
     }
 
     /**
@@ -155,13 +171,16 @@ class FamilyTreeRenderer
         ]);
 
         $html = view('modules/spNavigator/viewport', [
-            'module'        => $this->moduleName,
-            'moduleVersion' => $this->moduleVersion,
-            'prefix'        => $cardName,
-            'rootXref'      => $this->rootXref,
-            'tree'          => $this->tree,
-            'expandUrl'     => $expandUrl,
-            'searchUrl'     => $searchUrl,
+            'module'                  => $this->moduleName,
+            'moduleVersion'           => $this->moduleVersion,
+            'prefix'                  => $cardName,
+            'rootXref'                => $this->rootXref,
+            'tree'                    => $this->tree,
+            'expandUrl'               => $expandUrl,
+            'searchUrl'               => $searchUrl,
+            'defaultDetails'          => $this->defaultDetails,
+            'defaultAdvancedControls' => $this->defaultAdvancedControls,
+            'defaultSources'          => $this->defaultSources,
         ]);
 
         $isExpanded = $expanded ? 'true' : 'false';

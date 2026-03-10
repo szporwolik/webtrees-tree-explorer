@@ -144,8 +144,17 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     // Track the currently displayed root person xref (for share links)
     this.currentRootXref = '';
 
-    // Sources visibility state (default: off)
-    this.showSources = false;
+    // Sources visibility state (read from data attribute, default: off)
+    var defaultSources = this.container ? this.container.getAttribute('data-default-sources') : '0';
+    this.showSources = defaultSources === '1';
+
+    // Details visibility state (default: on, read from data attribute)
+    var defaultDetails = this.container ? this.container.getAttribute('data-default-details') : '1';
+    this.showDetails = defaultDetails !== '0';
+
+    // Advanced controls visibility state (default: on, read from data attribute)
+    var defaultAdvanced = this.container ? this.container.getAttribute('data-default-advanced') : '1';
+    this.showAdvancedControls = defaultAdvanced !== '0';
 
     // DOM card references
     this.cardElements   = {};   // nodeId -> DOM element
@@ -158,10 +167,19 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     var urlXref = urlParams.get('xref');
     this._setCurrentXref(urlXref);
 
-    // Restore sources state from URL
-    if (urlParams.get('sources') === '1') {
-        this.showSources = true;
+    // Restore toggle states from URL (override defaults)
+    if (urlParams.has('sources')) {
+        this.showSources = urlParams.get('sources') === '1';
     }
+    if (urlParams.has('details')) {
+        this.showDetails = urlParams.get('details') === '1';
+    }
+    if (urlParams.has('advanced')) {
+        this.showAdvancedControls = urlParams.get('advanced') === '1';
+    }
+
+    // Apply initial container classes
+    this._applyToggleClasses();
 
     this.measureAndRender();
 
@@ -2546,6 +2564,28 @@ FamilyNavigator.prototype.initToolbar = function () {
         });
     }
 
+    // Details toggle
+    var toggleDetails = document.getElementById(prefix + '_toggleDetails');
+    if (toggleDetails) {
+        toggleDetails.checked = nav.showDetails;
+        toggleDetails.addEventListener('change', function () {
+            nav.showDetails = this.checked;
+            nav._applyToggleClasses();
+            nav.measureAndRender();
+        });
+    }
+
+    // Advanced controls toggle
+    var toggleAdvanced = document.getElementById(prefix + '_toggleAdvanced');
+    if (toggleAdvanced) {
+        toggleAdvanced.checked = nav.showAdvancedControls;
+        toggleAdvanced.addEventListener('change', function () {
+            nav.showAdvancedControls = this.checked;
+            nav._applyToggleClasses();
+            nav.measureAndRender();
+        });
+    }
+
     // Focus chip — click to open search panel
     if (this.focusChip) {
         this.focusChip.addEventListener('click', function () {
@@ -2780,6 +2820,16 @@ FamilyNavigator.prototype.copyShareLink = function (btnEl) {
     } else {
         url.searchParams.delete('sources');
     }
+    if (!this.showDetails) {
+        url.searchParams.set('details', '0');
+    } else {
+        url.searchParams.delete('details');
+    }
+    if (!this.showAdvancedControls) {
+        url.searchParams.set('advanced', '0');
+    } else {
+        url.searchParams.delete('advanced');
+    }
     var shareUrl = url.toString();
 
     navigator.clipboard.writeText(shareUrl).then(function () {
@@ -2981,6 +3031,16 @@ FamilyNavigator.prototype._toggleSourcesVisibility = function () {
     for (var j = 0; j < chipIcons.length; j++) {
         chipIcons[j].style.display = show ? 'inline-flex' : 'none';
     }
+};
+
+/**
+ * Apply or remove CSS classes on the container for details/advanced toggles.
+ */
+FamilyNavigator.prototype._applyToggleClasses = function () {
+    var container = this.container;
+    if (!container) return;
+    container.classList.toggle('sp-hide-details', !this.showDetails);
+    container.classList.toggle('sp-hide-advanced', !this.showAdvancedControls);
 };
 
 // ==========================================================================

@@ -1,0 +1,77 @@
+<?php
+
+declare(strict_types=1);
+
+use Fisharebest\Webtrees\Http\RequestHandlers\ControlPanel;
+use Fisharebest\Webtrees\Http\RequestHandlers\ModulesAllPage;
+use Fisharebest\Webtrees\I18N;
+
+/**
+ * @var string $title
+ * @var string $defaultDetails
+ * @var string $defaultAdvanced
+ * @var string $defaultSources
+ */
+
+?>
+
+<?= view('components/breadcrumbs', ['links' => [route(ControlPanel::class) => I18N::translate('Control panel'), route(ModulesAllPage::class) => I18N::translate('Modules'), $title]]) ?>
+
+<h1><?= $title ?></h1>
+
+<form method="post">
+    <?= csrf_field() ?>
+
+    <div class="row mb-3">
+        <label class="col-sm-3 col-form-label">
+            <?= I18N::translate('Show details by default') ?>
+        </label>
+        <div class="col-sm-9">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="default_details" name="default_details" value="1"
+                    <?= $defaultDetails === '1' ? 'checked' : '' ?>>
+                <label class="form-check-label" for="default_details">
+                    <?= I18N::translate('Show dates, places, markers, and marriage information on the tree by default.') ?>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <label class="col-sm-3 col-form-label">
+            <?= I18N::translate('Show advanced controls by default') ?>
+        </label>
+        <div class="col-sm-9">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="default_advanced" name="default_advanced" value="1"
+                    <?= $defaultAdvanced === '1' ? 'checked' : '' ?>>
+                <label class="form-check-label" for="default_advanced">
+                    <?= I18N::translate('Show action buttons (sources, notes, media, add note, edit family) on person cards by default.') ?>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <label class="col-sm-3 col-form-label">
+            <?= I18N::translate('Show sources by default') ?>
+        </label>
+        <div class="col-sm-9">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="default_sources" name="default_sources" value="1"
+                    <?= $defaultSources === '1' ? 'checked' : '' ?>>
+                <label class="form-check-label" for="default_sources">
+                    <?= I18N::translate('Show source, note, and media count badges on person cards and marriage chips by default.') ?>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="offset-sm-3 col-sm-9">
+            <button type="submit" class="btn btn-primary">
+                <?= I18N::translate('save') ?>
+            </button>
+        </div>
+    </div>
+</form>

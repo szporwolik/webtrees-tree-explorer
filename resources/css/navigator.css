@@ -138,7 +138,7 @@
    SOURCES TOGGLE SWITCH
    ===================================================================== */
 
-.sp-toggle-sources {
+.sp-toggle-switch-label {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -155,12 +155,12 @@
     transition: background 0.15s, border-color 0.15s;
 }
 
-.sp-toggle-sources:hover {
+.sp-toggle-switch-label:hover {
     background: #f3f4f6;
     border-color: var(--wtp-border-strong, #adb5bd);
 }
 
-.sp-toggle-sources:has(.sp-toggle-input:disabled) {
+.sp-toggle-switch-label:has(.sp-toggle-input:disabled) {
     opacity: 0.35;
     cursor: not-allowed;
     pointer-events: none;
@@ -218,6 +218,22 @@
 
 .sp-toggle-label {
     line-height: 1;
+}
+
+/* ── Details-off mode: hide dates, places, markers, parent ages, marriage info ── */
+.sp-navigator.sp-hide-details .sp-years,
+.sp-navigator.sp-hide-details .sp-parent-ages,
+.sp-navigator.sp-hide-details .sp-place-marker,
+.sp-navigator.sp-hide-details .sp-deceased-ribbon,
+.sp-navigator.sp-hide-details .sp-couple-rings,
+.sp-navigator.sp-hide-details .sp-couple-date,
+.sp-navigator.sp-hide-details .sp-couple-chip-duration {
+    display: none !important;
+}
+
+/* ── Advanced-off mode: hide card action buttons except edit-person and rebase ── */
+.sp-navigator.sp-hide-advanced .sp-card-actions {
+    display: none !important;
 }
 
 /* =====================================================================
@@ -1535,7 +1551,7 @@ body:has(.sp-fullview) nav[role="navigation"] {
     color: var(--wtp-accent, #3b82f6);
 }
 
-.wtp-plugin-root .sp-toggle-sources {
+.wtp-plugin-root .sp-toggle-switch-label {
     color: var(--wtp-text-muted);
 }
 
@@ -1792,6 +1808,10 @@ body:has(.sp-fullview) nav[role="navigation"] {
     }
 
     .sp-couple-chip-icons {
+        display: none;
+    }
+
+    .sp-toggle-label {
         display: none;
     }
 }

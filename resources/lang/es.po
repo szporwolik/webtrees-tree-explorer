@@ -235,3 +235,43 @@ msgstr "%sa"
 #: Module/TreeNavigator/FamilyTreeRenderer.php
 msgid "%sm"
 msgstr "%sm"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Show/hide advanced card controls"
+msgstr "Mostrar/ocultar controles avanzados de tarjetas"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Controls"
+msgstr "Controles"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Show/hide dates, places and markers"
+msgstr "Mostrar/ocultar fechas, lugares y marcadores"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Details"
+msgstr "Detalles"
+
+#: resources/views/modules/spNavigator/settings.phtml
+msgid "Show details by default"
+msgstr "Mostrar detalles por defecto"
+
+#: resources/views/modules/spNavigator/settings.phtml
+msgid "Show dates, places, markers, and marriage information on the tree by default."
+msgstr "Mostrar fechas, lugares, marcadores e información de matrimonio en el árbol por defecto."
+
+#: resources/views/modules/spNavigator/settings.phtml
+msgid "Show advanced controls by default"
+msgstr "Mostrar controles avanzados por defecto"
+
+#: resources/views/modules/spNavigator/settings.phtml
+msgid "Show action buttons (sources, notes, media, add note, edit family) on person cards by default."
+msgstr "Mostrar botones de acción (fuentes, notas, medios, agregar nota, editar familia) en las tarjetas de personas por defecto."
+
+#: resources/views/modules/spNavigator/settings.phtml
+msgid "Show sources by default"
+msgstr "Mostrar fuentes por defecto"
+
+#: resources/views/modules/spNavigator/settings.phtml
+msgid "Show source, note, and media count badges on person cards and marriage chips by default."
+msgstr "Mostrar contadores de fuentes, notas y medios en las tarjetas de personas y marcadores de matrimonio por defecto."

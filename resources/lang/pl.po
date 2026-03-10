@@ -235,3 +235,43 @@ msgstr "%sl"
 #: Module/TreeNavigator/FamilyTreeRenderer.php
 msgid "%sm"
 msgstr "%sm"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Show/hide advanced card controls"
+msgstr "Pokaż/ukryj zaawansowane kontrolki kart"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Controls"
+msgstr "Kontrolki"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Show/hide dates, places and markers"
+msgstr "Pokaż/ukryj daty, miejsca i znaczniki"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Details"
+msgstr "Szczegóły"
+
+#: resources/views/modules/spNavigator/settings.phtml
+msgid "Show details by default"
+msgstr "Domyślnie pokazuj szczegóły"
+
+#: resources/views/modules/spNavigator/settings.phtml
+msgid "Show dates, places, markers, and marriage information on the tree by default."
+msgstr "Domyślnie pokazuj daty, miejsca, znaczniki i informacje o małżeństwach na drzewie."
+
+#: resources/views/modules/spNavigator/settings.phtml
+msgid "Show advanced controls by default"
+msgstr "Domyślnie pokazuj zaawansowane kontrolki"
+
+#: resources/views/modules/spNavigator/settings.phtml
+msgid "Show action buttons (sources, notes, media, add note, edit family) on person cards by default."
+msgstr "Domyślnie pokazuj przyciski akcji (źródła, notatki, media, dodaj notatkę, edytuj rodzinę) na kartach osób."
+
+#: resources/views/modules/spNavigator/settings.phtml
+msgid "Show sources by default"
+msgstr "Domyślnie pokazuj źródła"
+
+#: resources/views/modules/spNavigator/settings.phtml
+msgid "Show source, note, and media count badges on person cards and marriage chips by default."
+msgstr "Domyślnie pokazuj liczniki źródeł, notatek i mediów na kartach osób i znacznikach małżeństw."
