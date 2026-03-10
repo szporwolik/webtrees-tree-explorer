@@ -1110,6 +1110,8 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
     else tipParts.push('Partnership');
     if (familyData.marriageDate) tipParts.push('Marriage: ' + familyData.marriageDate);
     if (familyData.divorceDate) tipParts.push('Divorce: ' + familyData.divorceDate);
+    if (Number.isFinite(familyData.husbandAgeAtMarriage)) tipParts.push('♂ age at marriage: ' + familyData.husbandAgeAtMarriage);
+    if (Number.isFinite(familyData.wifeAgeAtMarriage)) tipParts.push('♀ age at marriage: ' + familyData.wifeAgeAtMarriage);
     if (familyData.marriagePlace) tipParts.push('Marriage place: ' + familyData.marriagePlace);
     if (familyData.divorcePlace) tipParts.push('Divorce place: ' + familyData.divorcePlace);
     if (familyData.durationLabel) tipParts.push('Duration: ' + familyData.durationLabel);
@@ -1125,7 +1127,6 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
     var famMediaCount = Number.isFinite(familyData.familyMediaCount) ? familyData.familyMediaCount : 0;
 
     function appendChipExtras(chipEl) {
-        if (compactMode) return;
         var hasExtras = familyData.durationLabel || famSourceCount > 0 || famNoteCount > 0 || famMediaCount > 0;
         if (!hasExtras) return;
 
@@ -1169,9 +1170,9 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
 
     if (isDivorced) {
         // Divorced layout: top date / broken rings / bottom date.
-        if (!compactMode) lineEl.classList.add('sp-couple-line-divorced');
+        lineEl.classList.add('sp-couple-line-divorced');
 
-        if (!compactMode && familyData.marriageDate) {
+        if (familyData.marriageDate) {
             var mDate = document.createElement('span');
             mDate.className = 'sp-couple-date sp-couple-date-top';
             var mDateText = document.createElement('span');
@@ -1195,7 +1196,7 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
         brokenRings.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.ringBrokenFill + '" fill-opacity="0.45" stroke="' + wtpCSSColors.ringBrokenStroke + '" stroke-width="1.8"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.ringBrokenFill + '" fill-opacity="0.45" stroke="' + wtpCSSColors.ringBrokenStroke + '" stroke-width="1.8"/><line x1="4" y1="2" x2="20" y2="12" stroke="' + wtpCSSColors.divorceLine + '" stroke-width="1.7"/></svg>';
         lineEl.appendChild(brokenRings);
 
-        if (!compactMode) {
+        {
             var dDate = document.createElement('span');
             dDate.className = 'sp-couple-date sp-couple-date-bottom';
             if (familyData.divorceDate) dDate.classList.add('sp-divorce-date');
@@ -1226,7 +1227,7 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
         rings.className = 'sp-couple-rings';
         rings.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.ringFemaleFill + '" fill-opacity="0.55" stroke="' + wtpCSSColors.ringFemaleStroke + '" stroke-width="1.8"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.ringMaleFill + '" fill-opacity="0.55" stroke="' + wtpCSSColors.ringMaleStroke + '" stroke-width="1.8"/></svg>';
         lineEl.appendChild(rings);
-        if (!compactMode) {
+        {
             var hasChipContent = familyData.marriageDate || familyData.durationLabel || famSourceCount > 0 || famNoteCount > 0 || famMediaCount > 0;
             if (hasChipContent) {
                 var mDate = document.createElement('span');
@@ -1254,7 +1255,7 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
         heart.className = 'sp-couple-rings';
         heart.innerHTML = '<svg viewBox="0 0 20 18" width="48" height="42"><path d="M10 17s-7-4.35-7-10A4 4 0 0 1 10 4a4 4 0 0 1 7 3c0 5.65-7 10-7 10z" fill="' + wtpCSSColors.heartFill + '" fill-opacity="0.72" stroke="' + wtpCSSColors.heartStroke + '" stroke-width="1.5" stroke-linejoin="round"/></svg>';
         lineEl.appendChild(heart);
-        if (!compactMode) {
+        {
             var hasExtras = familyData.durationLabel || famSourceCount > 0 || famNoteCount > 0 || famMediaCount > 0;
             if (hasExtras) {
                 var uChip = document.createElement('span');

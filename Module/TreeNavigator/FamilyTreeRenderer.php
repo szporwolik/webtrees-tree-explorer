@@ -489,6 +489,27 @@ class FamilyTreeRenderer
             $spouseDeathJd = ($spouse instanceof Individual && $spouse->getDeathDate()->isOK()) ? $spouse->getDeathDate()->julianDay() : 0;
             $durationLabel = $this->formatRelationshipDuration($marriageJd, $divorceJd, $nextMarriageJd, $personDeathJd, $spouseDeathJd);
 
+            // Ages at marriage (using canonical husband/wife from the family record)
+            $husbandAgeAtMarriage = null;
+            $wifeAgeAtMarriage = null;
+            if ($marriageJd > 0) {
+                $marriageDateObj = $spouseFamily->getMarriageDate();
+                $husb = $spouseFamily->husband();
+                if ($husb instanceof Individual && $husb->getBirthDate()->isOK()) {
+                    $hAge = new Age($husb->getBirthDate(), $marriageDateObj);
+                    if ($hAge->ageYears() >= 0) {
+                        $husbandAgeAtMarriage = $hAge->ageYears();
+                    }
+                }
+                $wif = $spouseFamily->wife();
+                if ($wif instanceof Individual && $wif->getBirthDate()->isOK()) {
+                    $wAge = new Age($wif->getBirthDate(), $marriageDateObj);
+                    if ($wAge->ageYears() >= 0) {
+                        $wifeAgeAtMarriage = $wAge->ageYears();
+                    }
+                }
+            }
+
             $families[] = [
                 'spouse'       => $spouseData,
                 'marriageDate' => $marriageDate,
@@ -507,6 +528,8 @@ class FamilyTreeRenderer
                 'familyUrl'    => $familyUrl,
                 'familyXref'   => $spouseFamily->xref(),
                 'spouseHasParents' => $spouseHasParents,
+                'husbandAgeAtMarriage' => $husbandAgeAtMarriage,
+                'wifeAgeAtMarriage' => $wifeAgeAtMarriage,
             ];
             $familyObjects[] = $spouseFamily;
         }
