@@ -111,6 +111,9 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     // Track the currently displayed root person xref (for share links)
     this.currentRootXref = '';
 
+    // Sources visibility state (default: off)
+    this.showSources = false;
+
     // DOM card references
     this.cardElements   = {};   // nodeId -> DOM element
 
@@ -118,8 +121,14 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.buildIndex(this.treeData);
 
     // Determine the actual target xref (may differ from root person due to gender swap)
-    var urlXref = new URL(window.location.href).searchParams.get('xref');
+    var urlParams = new URL(window.location.href).searchParams;
+    var urlXref = urlParams.get('xref');
     this._setCurrentXref(urlXref);
+
+    // Restore sources state from URL
+    if (urlParams.get('sources') === '1') {
+        this.showSources = true;
+    }
 
     this.measureAndRender();
 
@@ -133,6 +142,7 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
         this.focusOrigin();
     }
     this.hideOverlay();
+    this._updateFocusPersonBox();
 }
 
 /**
@@ -783,6 +793,7 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
  * Create a single person card DOM element.
  */
 FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
+    var nav = this;
     var genderClass = personData.sex === 'M' ? 'sp-male' : (personData.sex === 'F' ? 'sp-female' : 'sp-unknown');
     var card = document.createElement('div');
     card.className = 'sp-card ' + genderClass + (isOrigin ? ' sp-origin' : '') + (personData.isUnknown ? ' sp-card-unknown' : '');
@@ -860,8 +871,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         years.title = placeTitleParts.join(' | ');
         var placeMarker = document.createElement('span');
         placeMarker.className = 'sp-place-marker';
-        placeMarker.textContent = '\u2022';
-        placeMarker.setAttribute('aria-hidden', 'true');
+        placeMarker.innerHTML = '<svg viewBox="0 0 12 16" width="10" height="13" aria-hidden="true"><path d="M6 0C2.7 0 0 2.5 0 5.6 0 9.8 6 16 6 16s6-6.2 6-10.4C12 2.5 9.3 0 6 0zm0 7.6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z" fill="currentColor"/></svg>';
         years.appendChild(placeMarker);
     }
     info.appendChild(years);
@@ -921,7 +931,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     var actionsLeft = document.createElement('div');
     actionsLeft.className = 'sp-card-actions-left';
 
-    function quickAction(url, label, glyph) {
+    function quickAction(url, label, svgIcon) {
         if (!url) return null;
         var link = document.createElement('a');
         link.href = url;
@@ -930,13 +940,17 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         link.className = 'sp-card-action-link';
         link.title = label;
         link.setAttribute('aria-label', label + ' for ' + personData.name);
-        link.textContent = glyph;
+        link.innerHTML = svgIcon;
         return link;
     }
 
-    var addSourceLink = quickAction(personData.addSourceUrl, 'Add source', 'S');
-    var addNoteLink = quickAction(personData.addNoteUrl, 'Add note', 'N');
-    var addMediaLink = quickAction(personData.addMediaUrl, 'Add media', 'M');
+    var srcIcon = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M2 1h8l4 4v9a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M9 1v4h4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
+    var noteIcon = '<svg viewBox="0 0 16 16" width="12" height="12"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="4" y1="5" x2="12" y2="5" stroke="currentColor" stroke-width="1.2"/><line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.2"/><line x1="4" y1="11" x2="9" y2="11" stroke="currentColor" stroke-width="1.2"/></svg>';
+    var mediaIcon = '<svg viewBox="0 0 16 16" width="12" height="12"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5.5" cy="6.5" r="1.5" fill="currentColor"/><path d="M1.5 11l3-3 2 2 3-4 4 5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+
+    var addSourceLink = quickAction(personData.addSourceUrl, 'Add source', srcIcon);
+    var addNoteLink = quickAction(personData.addNoteUrl, 'Add note', noteIcon);
+    var addMediaLink = quickAction(personData.addMediaUrl, 'Add media', mediaIcon);
     if (addSourceLink) actionsLeft.appendChild(addSourceLink);
     if (addNoteLink) actionsLeft.appendChild(addNoteLink);
     if (addMediaLink) actionsLeft.appendChild(addMediaLink);
@@ -947,12 +961,31 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     var noteCount = Number.isFinite(personData.noteCount) ? personData.noteCount : 0;
     counters.textContent = 'S:' + sourceCount + ' N:' + noteCount;
     counters.title = 'Sources: ' + sourceCount + ' | Notes: ' + noteCount;
+    if (!nav.showSources) counters.style.display = 'none';
     actionsLeft.appendChild(counters);
 
     actions.appendChild(actionsLeft);
 
     var actionsRight = document.createElement('div');
     actionsRight.className = 'sp-card-actions-right';
+
+    // Rebase/center tree button
+    if (personData.xref) {
+        var rebaseBtn = document.createElement('button');
+        rebaseBtn.type = 'button';
+        rebaseBtn.className = 'sp-card-action-btn';
+        rebaseBtn.title = 'Center tree on this person';
+        rebaseBtn.setAttribute('aria-label', 'Center tree on ' + personData.name);
+        rebaseBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/><line x1="8" y1="0" x2="8" y2="4" stroke="currentColor" stroke-width="1.3"/><line x1="8" y1="12" x2="8" y2="16" stroke="currentColor" stroke-width="1.3"/><line x1="0" y1="8" x2="4" y2="8" stroke="currentColor" stroke-width="1.3"/><line x1="12" y1="8" x2="16" y2="8" stroke="currentColor" stroke-width="1.3"/></svg>';
+        (function(xref) {
+            rebaseBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                nav.navigateTo(xref);
+            });
+        })(personData.xref);
+        actionsRight.appendChild(rebaseBtn);
+    }
+
     var viewLink = document.createElement('a');
     viewLink.href = personData.url;
     viewLink.target = '_blank';
@@ -971,6 +1004,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
  * Create couple-line element with marriage rings, dates, and optional divorce info.
  */
 FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, familyIndex, familyCount) {
+    var nav = this;
     var lineEl = document.createElement('div');
     lineEl.className = 'sp-couple-line';
     lineEl.dataset.familyIndex = familyIndex;
@@ -1033,6 +1067,7 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
         var metrics = document.createElement('span');
         metrics.className = 'sp-couple-metrics';
         metrics.textContent = 'S:' + (familyData.familySourceCount || 0) + ' N:' + (familyData.familyNoteCount || 0);
+        if (!nav.showSources) metrics.style.display = 'none';
         lineEl.appendChild(metrics);
     }
 
@@ -1049,7 +1084,10 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
                 mDate.classList.add('sp-couple-date-' + familyData.marriageQuality);
             }
             if (familyData.marriagePlace) {
-                mDate.classList.add('sp-couple-date-has-place');
+                var pm = document.createElement('span');
+                pm.className = 'sp-place-marker';
+                pm.innerHTML = '<svg viewBox="0 0 12 16" width="10" height="13" aria-hidden="true"><path d="M6 0C2.7 0 0 2.5 0 5.6 0 9.8 6 16 6 16s6-6.2 6-10.4C12 2.5 9.3 0 6 0zm0 7.6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z" fill="currentColor"/></svg>';
+                mDate.appendChild(pm);
                 mDate.title = familyData.marriageDate + ' | ' + familyData.marriagePlace;
             } else {
                 mDate.title = familyData.marriageDate;
@@ -1070,7 +1108,10 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
                 dDate.classList.add('sp-couple-date-' + familyData.divorceQuality);
             }
             if (familyData.divorcePlace) {
-                dDate.classList.add('sp-couple-date-has-place');
+                var dpm = document.createElement('span');
+                dpm.className = 'sp-place-marker';
+                dpm.innerHTML = '<svg viewBox="0 0 12 16" width="10" height="13" aria-hidden="true"><path d="M6 0C2.7 0 0 2.5 0 5.6 0 9.8 6 16 6 16s6-6.2 6-10.4C12 2.5 9.3 0 6 0zm0 7.6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z" fill="currentColor"/></svg>';
+                dDate.appendChild(dpm);
                 dDate.title = familyData.divorceDate + ' | ' + familyData.divorcePlace;
             } else {
                 dDate.title = familyData.divorceDate;
@@ -1101,7 +1142,10 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
                 mDate.classList.add('sp-couple-date-' + familyData.marriageQuality);
             }
             if (familyData.marriagePlace) {
-                mDate.classList.add('sp-couple-date-has-place');
+                var mpm = document.createElement('span');
+                mpm.className = 'sp-place-marker';
+                mpm.innerHTML = '<svg viewBox="0 0 12 16" width="10" height="13" aria-hidden="true"><path d="M6 0C2.7 0 0 2.5 0 5.6 0 9.8 6 16 6 16s6-6.2 6-10.4C12 2.5 9.3 0 6 0zm0 7.6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z" fill="currentColor"/></svg>';
+                mDate.appendChild(mpm);
                 mDate.title = familyData.marriageDate + ' | ' + familyData.marriagePlace;
             }
             lineEl.appendChild(mDate);
@@ -1904,6 +1948,7 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
                         nav._setCurrentXref(xref);
                         nav.measureAndRender();
                         nav.focusOrigin();
+                        nav._updateFocusPersonBox();
                     }
                 } catch (e) {
                     console.error('SP Tree Navigator: navigate parse error', e);
@@ -2247,6 +2292,19 @@ FamilyNavigator.prototype.initToolbar = function () {
             nav.copyShareLink(btnShare);
         });
     }
+
+    // Sources toggle
+    var toggleSources = document.getElementById(prefix + '_toggleSources');
+    if (toggleSources) {
+        toggleSources.checked = nav.showSources;
+        toggleSources.addEventListener('change', function () {
+            nav.showSources = this.checked;
+            nav.measureAndRender();
+        });
+    }
+
+    // Focus person box — initial render
+    nav._updateFocusPersonBox();
 };
 
 // ==========================================================================
@@ -2449,6 +2507,11 @@ FamilyNavigator.prototype.copyShareLink = function (btnEl) {
     if (this.currentRootXref) {
         url.searchParams.set('xref', this.currentRootXref);
     }
+    if (this.showSources) {
+        url.searchParams.set('sources', '1');
+    } else {
+        url.searchParams.delete('sources');
+    }
     var shareUrl = url.toString();
 
     navigator.clipboard.writeText(shareUrl).then(function () {
@@ -2522,6 +2585,73 @@ FamilyNavigator.prototype.showOverlay = function () {
 FamilyNavigator.prototype.hideOverlay = function () {
     if (this.overlay) {
         this.overlay.classList.remove('sp-overlay-active');
+    }
+};
+
+// ==========================================================================
+// FOCUS PERSON BOX
+// ==========================================================================
+
+/**
+ * Update the focus-person info box in the toolbar with the current root person.
+ */
+FamilyNavigator.prototype._updateFocusPersonBox = function () {
+    var el = document.getElementById(this.cardPrefix + '_focusPerson');
+    if (!el) return;
+
+    var rootNode = this.nodeMap && this.treeData ? this.nodeMap[this.treeData.rootId] : null;
+    if (!rootNode || !rootNode.person) {
+        el.textContent = '';
+        return;
+    }
+
+    var p = rootNode.person;
+    // If the current root xref is a spouse rather than the root person, show that spouse
+    var displayPerson = p;
+    if (this.currentRootXref && this.currentRootXref !== p.xref && rootNode.families) {
+        for (var i = 0; i < rootNode.families.length; i++) {
+            var sp = rootNode.families[i].spouse;
+            if (sp && sp.xref === this.currentRootXref) {
+                displayPerson = sp;
+                break;
+            }
+        }
+    }
+
+    el.innerHTML = '';
+    var icon = document.createElement('span');
+    icon.className = 'sp-focus-person-icon';
+    if (displayPerson.thumb) {
+        var img = document.createElement('img');
+        img.className = 'sp-focus-person-img';
+        img.src = displayPerson.thumb;
+        img.alt = displayPerson.name || '';
+        icon.appendChild(img);
+    } else {
+        icon.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M8 1a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-4 0-7 1.8-7 3v1h14v-1c0-1.2-3-3-7-3z" fill="currentColor"/></svg>';
+    }
+    el.appendChild(icon);
+    var nameSpan = document.createElement('span');
+    nameSpan.className = 'sp-focus-person-name';
+    nameSpan.textContent = displayPerson.name || '?';
+    el.appendChild(nameSpan);
+};
+
+// ==========================================================================
+// SOURCES VISIBILITY TOGGLE
+// ==========================================================================
+
+/**
+ * Show or hide source/note counters on all person cards.
+ */
+FamilyNavigator.prototype._toggleSourcesVisibility = function () {
+    var container = this.container;
+    if (!container) return;
+
+    var display = this.showSources ? '' : 'none';
+    var counters = container.querySelectorAll('.sp-card-counters, .sp-couple-metrics');
+    for (var i = 0; i < counters.length; i++) {
+        counters[i].style.display = display;
     }
 };
 

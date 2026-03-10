@@ -488,7 +488,11 @@ class FamilyTreeRenderer
             $familyGedcom = $spouseFamily->gedcom();
             $familySourceCount = $this->countLevelOneTag($familyGedcom, 'SOUR');
             $familyNoteCount = $this->countLevelOneTag($familyGedcom, 'NOTE');
-            $durationLabel = $this->formatRelationshipDuration($marriageJd, $divorceJd, $nextMarriageJd);
+
+            // Death date JDs for duration fallback
+            $personDeathJd = $person->getDeathDate()->isOK() ? $person->getDeathDate()->julianDay() : 0;
+            $spouseDeathJd = ($spouse instanceof Individual && $spouse->getDeathDate()->isOK()) ? $spouse->getDeathDate()->julianDay() : 0;
+            $durationLabel = $this->formatRelationshipDuration($marriageJd, $divorceJd, $nextMarriageJd, $personDeathJd, $spouseDeathJd);
 
             $families[] = [
                 'spouse'       => $spouseData,
@@ -995,7 +999,7 @@ class FamilyTreeRenderer
     /**
      * Build compact relationship duration label (e.g. "12y 3m").
      */
-    private function formatRelationshipDuration(int $startJd, int $endJd, int $fallbackEndJd): string
+    private function formatRelationshipDuration(int $startJd, int $endJd, int $fallbackEndJd, int $personDeathJd = 0, int $spouseDeathJd = 0): string
     {
         if ($startJd <= 0) {
             return '';
@@ -1003,12 +1007,23 @@ class FamilyTreeRenderer
 
         $effectiveEndJd = 0;
         if ($endJd > 0) {
+            // Divorce date exists — use it
             $effectiveEndJd = $endJd;
         } elseif ($fallbackEndJd > 0) {
+            // Next marriage date as fallback
             $effectiveEndJd = $fallbackEndJd;
+        } elseif ($personDeathJd > 0 && $spouseDeathJd > 0) {
+            // Both dead, no divorce — use the earlier death date
+            $effectiveEndJd = min($personDeathJd, $spouseDeathJd);
+        } elseif ($personDeathJd > 0 || $spouseDeathJd > 0) {
+            // One dead — marriage lasted until that death
+            $effectiveEndJd = max($personDeathJd, $spouseDeathJd);
+        } elseif ($personDeathJd === 0 && $spouseDeathJd === 0) {
+            // Both alive — duration until today
+            $effectiveEndJd = (int) gregoriantojd((int) date('n'), (int) date('j'), (int) date('Y'));
         } else {
-            $now = getdate();
-            $effectiveEndJd = gregoriantojd((int) $now['mon'], (int) $now['mday'], (int) $now['year']);
+            // Insufficient data — do not calculate
+            return '';
         }
 
         $days = max(0, $effectiveEndJd - $startJd);

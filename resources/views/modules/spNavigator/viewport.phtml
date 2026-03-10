@@ -42,6 +42,14 @@ use Fisharebest\Webtrees\I18N;
             <button id="<?= $prefix ?>_btnShare" class="sp-btn" title="<?= I18N::translate('Copy share link') ?>">
                 &#x1F517;
             </button>
+            <span class="sp-toolbar-sep"></span>
+            <label class="sp-toggle-sources" title="<?= I18N::translate('Show source counts') ?>">
+                <input type="checkbox" id="<?= $prefix ?>_toggleSources" class="sp-toggle-input">
+                <span class="sp-toggle-switch"></span>
+                <span class="sp-toggle-label">S</span>
+            </label>
+            <span class="sp-toolbar-spacer"></span>
+            <span id="<?= $prefix ?>_focusPerson" class="sp-focus-person"></span>
             <span id="<?= $prefix ?>_loader" class="sp-loader">&#x21BB;</span>
         </div>
 

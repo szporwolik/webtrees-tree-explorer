@@ -220,6 +220,111 @@
     margin: 6px 4px;
 }
 
+/* Sources toggle switch */
+.sp-toggle-sources {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    white-space: nowrap;
+    padding: 0 2px;
+}
+
+.sp-toggle-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+.sp-toggle-switch {
+    position: relative;
+    width: 28px;
+    height: 16px;
+    background: #d1d5db;
+    border-radius: 8px;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.sp-toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.sp-toggle-input:checked + .sp-toggle-switch {
+    background: #3b82f6;
+}
+
+.sp-toggle-input:checked + .sp-toggle-switch::after {
+    transform: translateX(12px);
+}
+
+.sp-toggle-label {
+    line-height: 1;
+}
+
+/* Toolbar spacer — pushes focus person box to the right */
+.sp-toolbar-spacer {
+    flex: 1;
+    min-width: 8px;
+}
+
+/* Focus person info box */
+.sp-focus-person {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #374151;
+    white-space: nowrap;
+    padding: 3px 10px;
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.18);
+    border-radius: 6px;
+    max-width: 200px;
+    overflow: hidden;
+}
+
+.sp-focus-person:empty {
+    display: none;
+}
+
+.sp-focus-person-icon {
+    display: flex;
+    align-items: center;
+    color: #3b82f6;
+    flex-shrink: 0;
+}
+
+.sp-focus-person-img {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1.5px solid rgba(59, 130, 246, 0.3);
+}
+
+.sp-focus-person-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* =====================================================================
    LOADING OVERLAY — covers viewport during data fetch
    ===================================================================== */
@@ -363,11 +468,8 @@
     transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
 
-.sp-couple-date-has-place::after {
-    content: '\2022';
+.sp-couple-date .sp-place-marker {
     margin-left: 5px;
-    color: #7c8898;
-    font-weight: 700;
 }
 
 .sp-couple-date-approx {
@@ -643,6 +745,12 @@
     color: #8fa0b3;
     font-size: 10px;
     vertical-align: middle;
+    display: inline-flex;
+    align-items: center;
+}
+
+.sp-place-marker svg {
+    display: block;
 }
 
 .sp-parent-ages {
@@ -725,6 +833,26 @@
 .sp-card-actions a:hover {
     color: #333;
     background: #f0f2f5;
+}
+
+.sp-card-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: #999;
+    border: none;
+    background: transparent;
+    border-radius: 3px;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s, background 0.15s;
+}
+
+.sp-card-action-btn:hover {
+    color: #1d4ed8;
+    background: #dbeafe;
 }
 
 /* (divorce info is now on the couple line) */
@@ -1172,8 +1300,7 @@ body:has(.sp-fullview) nav[role="navigation"] {
     color: var(--wtp-date-range);
 }
 
-.wtp-plugin-root .sp-place-marker,
-.wtp-plugin-root .sp-couple-date-has-place::after {
+.wtp-plugin-root .sp-place-marker {
     color: var(--wtp-marker-place);
 }
 
@@ -1200,6 +1327,45 @@ body:has(.sp-fullview) nav[role="navigation"] {
 .wtp-plugin-root .sp-card-actions a:hover {
     color: var(--wtp-text);
     background: var(--wtp-surface);
+}
+
+.wtp-plugin-root .sp-card-action-btn {
+    color: var(--wtp-text-muted);
+}
+
+.wtp-plugin-root .sp-card-action-btn:hover {
+    color: var(--wtp-accent);
+    background: color-mix(in srgb, var(--wtp-accent) 12%, var(--wtp-bg));
+}
+
+.wtp-plugin-root .sp-toggle-sources {
+    color: var(--wtp-text-muted);
+}
+
+.wtp-plugin-root .sp-toggle-switch {
+    background: var(--wtp-border);
+}
+
+.wtp-plugin-root .sp-toggle-input:checked + .sp-toggle-switch {
+    background: var(--wtp-accent);
+}
+
+.wtp-plugin-root .sp-focus-person {
+    color: var(--wtp-text);
+    background: color-mix(in srgb, var(--wtp-accent) 8%, var(--wtp-bg));
+    border-color: color-mix(in srgb, var(--wtp-accent) 18%, transparent);
+}
+
+.wtp-plugin-root .sp-focus-person-icon {
+    color: var(--wtp-accent);
+}
+
+.wtp-plugin-root .sp-focus-person-img {
+    border-color: color-mix(in srgb, var(--wtp-accent) 30%, transparent);
+}
+
+.wtp-plugin-root .sp-toolbar-sep {
+    background: var(--wtp-border);
 }
 
 /* Dropdown/autocomplete */
