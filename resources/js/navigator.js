@@ -41,9 +41,11 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.CARD_H         = 82;   // approximate card height
     this.COUPLE_GAP     = 36;   // gap between person card and spouse card (couple-line with rings/dates)
     this.H_GAP          = 24;   // horizontal gap between sibling subtrees
+    this.FAMILY_GROUP_GAP = 72; // extra spacing between children from different marriages
+    this.MULTI_SPOUSE_SEP = 28; // extra visual gap before each additional spouse group
     this.V_GAP          = 76;   // vertical gap between generations (global spacing to preserve same-level generations)
-    this.CHILD_TOP_CLEARANCE = 0; // endpoint on card edge so dot is half-visible (preferred visual style)
-    this.FORK_SOURCE_OFFSET = 0; // keep forks continuous from couple line (no visible connector gaps)
+    this.CHILD_TOP_CLEARANCE = 6; // clearance above child card so connector doesn't touch
+    this.FORK_SOURCE_OFFSET = 0; // keep fork continuous with couple-line to avoid visible gaps
     this.LAZY_W         = 192;
     this.LAZY_H         = 36;
 
@@ -247,7 +249,7 @@ FamilyNavigator.prototype.measureSubtree = function (nodeId) {
             var prevFi = this._childFamilyIndex(nodeId, children[i - 1]);
             var curFi  = this._childFamilyIndex(nodeId, children[i]);
             if (prevFi !== curFi && prevFi >= 0 && curFi >= 0) {
-                childrenTotalW += this.H_GAP;
+                childrenTotalW += this.FAMILY_GROUP_GAP;
             }
         }
         childrenTotalW += this.measureSubtree(children[i]);
@@ -380,7 +382,7 @@ FamilyNavigator.prototype.positionSubtree = function (nodeId, x, y) {
             var prevFi = this._childFamilyIndex(nodeId, children[i - 1]);
             var curFi  = this._childFamilyIndex(nodeId, children[i]);
             if (prevFi !== curFi && prevFi >= 0 && curFi >= 0) {
-                childrenTotalW += this.H_GAP;
+                childrenTotalW += this.FAMILY_GROUP_GAP;
             }
         }
         childrenTotalW += this.layoutMap[children[i]].subtreeW;
@@ -399,7 +401,7 @@ FamilyNavigator.prototype.positionSubtree = function (nodeId, x, y) {
             var prevFi = this._childFamilyIndex(nodeId, children[i]);
             var nextFi = this._childFamilyIndex(nodeId, children[i + 1]);
             if (prevFi !== nextFi && prevFi >= 0 && nextFi >= 0) {
-                gap += this.H_GAP;
+                gap += this.FAMILY_GROUP_GAP;
             }
         }
         childX += cLayout.subtreeW + gap;
@@ -628,6 +630,12 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
         for (var fi = 0; fi < node.families.length; fi++) {
             var fam = node.families[fi];
             var lineEl = this.createCoupleLine(fam, node.id, fi, familyCount);
+
+            // Extra spacing before each additional marriage to separate
+            // descendant connector groups from different spouse families.
+            if (fi > 0 && familyCount > 1) {
+                lineEl.style.marginLeft = this.MULTI_SPOUSE_SEP + 'px';
+            }
 
             // No vertical stagger for multi-marriage — all at same level
             wrapper.appendChild(lineEl);
@@ -1019,7 +1027,9 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
     ctx.strokeStyle = '#c0c6d0';
     ctx.fillStyle = '#c0c6d0';
     ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
+    // Use butt caps so line ends don't protrude past endpoints.
+    // Rounded appearance is provided by joins and explicit endpoint dots.
+    ctx.lineCap = 'butt';
     ctx.lineJoin = 'round';
 
     var R = 8; // corner radius for rounded connectors
@@ -1036,8 +1046,8 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
     // ====================================================================================
     // PARTNER/SPOUSE CONNECTORS — Horizontal lines at card vertical center
     // ====================================================================================
-    // CRITICAL: Y position uses layout.y + fixed offset for same-generation alignment
-    // X positions use DOM measurements to handle flexbox spacing correctly
+    // Track staggered Y offsets for each family so child forks can originate from correct position
+    var staggeredOffsets = {};  // nodeId -> { familyIndex -> yOffset }
     
     for (var nodeId in this.layoutMap) {
         var layout = this.layoutMap[nodeId];
@@ -1062,16 +1072,28 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         var personRightX = layout.x + (personCardRect.right - wrapperRect.left) / this.zoomLevel;
         
         // Stagger divorce connectors vertically - each spouse at different Y level
-        // Spread up to 5 spouses across ~30px vertical range (±15px from center)
+        // Spread up to 5 spouses across wider vertical range for better visual separation
         var familyCount = coupleLines.length;
-        var verticalSpacing = familyCount > 1 ? 8 : 0;  // pixels between each spouse connector
+        var verticalSpacing = familyCount > 1 ? 16 : 0;  // pixels between each spouse connector (increased for better visibility)
         var centerY = this.getPersonCenterY(layout);
+        
+        // Store offsets for this node's families
+        staggeredOffsets[nodeId] = {};
         
         // Draw connector for each family (person to each spouse)
         for (var fi = 0; fi < coupleLines.length; fi++) {
             // Stagger Y position: center ± offset based on family index
             var offset = (fi - (familyCount - 1) / 2) * verticalSpacing;
             var connectorY = centerY + offset;
+            
+            // Store offset for child fork drawing
+            staggeredOffsets[nodeId][fi] = offset;
+            
+            // For multi-marriage, hide CSS vertical drops and draw everything on canvas
+            var lineEl = coupleLines[fi];
+            if (lineEl && familyCount > 1) {
+                lineEl.classList.add('sp-couple-line-staggered');
+            }
             
             // Spouse card is at allCards index (fi + 1)
             var spouseCard = allCards[fi + 1];
@@ -1081,24 +1103,36 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             // Spouse's left edge X coordinate
             var spouseLeftX = layout.x + (spouseCardRect.left - wrapperRect.left) / this.zoomLevel;
             
-            // Draw connector with smooth curve at person card edge
-            var cornerR = 4;
+            // Endpoints exactly on card borders (dots are centered here).
+            var lineStartX = personRightX;
+            var lineEndX = spouseLeftX;
+            
+            // Draw straight horizontal connector between person and spouse
             ctx.beginPath();
-            ctx.moveTo(personRightX, connectorY);
-            if (Math.abs(spouseLeftX - personRightX) > cornerR * 3) {
-                // Room for rounded corners - use curves
-                ctx.quadraticCurveTo(personRightX + cornerR, connectorY, personRightX + cornerR, connectorY);
-                ctx.lineTo(spouseLeftX - cornerR, connectorY);
-                ctx.quadraticCurveTo(spouseLeftX, connectorY, spouseLeftX, connectorY);
-            } else {
-                // Tight space - straight line
-                ctx.lineTo(spouseLeftX, connectorY);
-            }
+            ctx.moveTo(lineStartX, connectorY);
+            ctx.lineTo(lineEndX, connectorY);
             ctx.stroke();
             
-            // Draw anchor dots at both ends
+            // Draw anchor dots centered on card borders (half-hidden by cards)
             drawDot(personRightX, connectorY);
             drawDot(spouseLeftX, connectorY);
+            
+            // For multi-marriage, draw vertical drop on canvas (CSS ::after is hidden)
+            if (familyCount > 1) {
+                // Find where couple-line element is and draw down from connectorY
+                var lineEl = coupleLines[fi];
+                if (lineEl) {
+                    var lineRect = lineEl.getBoundingClientRect();
+                    var dropStartY = connectorY - 1;
+                    var dropEndY = layout.y + ((lineRect.bottom - wrapperRect.top) / this.zoomLevel) + offset;
+                    var dropX = layout.x + ((lineRect.left + lineRect.width / 2) - wrapperRect.left) / this.zoomLevel;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(dropX, dropStartY);
+                    ctx.lineTo(dropX, dropEndY);
+                    ctx.stroke();
+                }
+            }
         }
     }
 
@@ -1113,9 +1147,9 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         var pNode = this.nodeMap[parentId];
         var srcY = pLayout.y + pLayout.h;
 
-        // Helper: find couple-line center X for given family index
-        // Use DOM measurement for X (flexbox can shift)
+        // Helper functions for connector source and target positions
         var self = this;
+        
         function coupleLineCenterX(nodeId, layout, fi) {
             var wrapper = self.cardElements[nodeId];
             if (wrapper) {
@@ -1126,12 +1160,9 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
                     return layout.x + ((lineRect.left + lineRect.width / 2) - wRect.left) / self.zoomLevel;
                 }
             }
-            // Fallback to calculated
             return self.getCoupleLineCenterX(layout, fi);
         }
 
-        // Helper: find bottom Y of card for connector source
-        // Use DOM measurement to correctly get couple-line bottom position
         function coupleLineBottomY(nodeId, layout, fi) {
             var wrapper = self.cardElements[nodeId];
             if (wrapper) {
@@ -1142,20 +1173,35 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
                     return layout.y + ((lineRect.bottom - wRect.top) / self.zoomLevel);
                 }
             }
-            // Fallback to measured card height
             return self.getPersonBottomY(layout);
         }
 
-        // Helper: compute target X,Y for a child node
-        // X: Use DOM measurement for accuracy
-        // Y: Use calculated position (same-generation alignment)
+        // Group children by familyIndex (undefined = ancestor or no-family edges)
+        var familyGroups = {};
+        var defaultGroup = [];
+        
+        for (var ci = 0; ci < children.length; ci++) {
+            var childId = children[ci];
+            var edgeKey = parentId + '->' + childId;
+            var edge = this.edgeMap[edgeKey];
+            if (edge && edge.familyIndex !== undefined) {
+                var fi = edge.familyIndex;
+                if (!familyGroups[fi]) familyGroups[fi] = [];
+                familyGroups[fi].push({ childId: childId, edge: edge });
+            } else {
+                defaultGroup.push({ childId: childId, edge: edge });
+            }
+        }
+
+        // CRITICAL: Collect all target Y values first to find global minimum
+        // This ensures siblings connect at same Y even if in different groups
         function targetXForChild(childId, edge) {
             var cLayout = self.layoutMap[childId];
             if (!cLayout || cLayout.x === undefined) return null;
             
             var childNode = self.nodeMap[childId];
             var tx = cLayout.centerX;  // Default: wrapper center
-            var ty = cLayout.y - self.CHILD_TOP_CLEARANCE;
+            var ty = cLayout.y;        // Card top border (dot appears half-hidden behind card)
             
             // If child has families, target specific card (person or spouse)
             if (childNode && childNode.families && childNode.families.length > 0) {
@@ -1188,41 +1234,50 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             }
             return { x: tx, y: ty };
         }
-
-        // Group children by familyIndex (undefined = ancestor or no-family edges)
-        var familyGroups = {};
-        var defaultGroup = [];
+        
+        // Collect all targets and find minimum Y across ALL children
+        var minGlobalY = Infinity;
         for (var ci = 0; ci < children.length; ci++) {
             var childId = children[ci];
             var edgeKey = parentId + '->' + childId;
             var edge = this.edgeMap[edgeKey];
-            if (edge && edge.familyIndex !== undefined) {
-                var fi = edge.familyIndex;
-                if (!familyGroups[fi]) familyGroups[fi] = [];
-                familyGroups[fi].push({ childId: childId, edge: edge });
-            } else {
-                defaultGroup.push({ childId: childId, edge: edge });
+            var t = targetXForChild(childId, edge);
+            if (t && t.y < minGlobalY) {
+                minGlobalY = t.y;
             }
         }
 
         // Draw forks per family group — stagger bar heights so they don't overlap
-        var familyKeys = Object.keys(familyGroups);
+        var familyKeys = Object.keys(familyGroups).map(function (k) { return parseInt(k, 10); }).sort(function (a, b) { return a - b; });
         var familyGroupCount = familyKeys.length;
+        var primaryFamilyIndex = familyGroupCount > 0 ? familyKeys[0] : -1;
         for (var fki = 0; fki < familyKeys.length; fki++) {
-            var fi = parseInt(familyKeys[fki]);
+            var fi = familyKeys[fki];
             var items = familyGroups[fi];
             var srcX = coupleLineCenterX(parentId, pLayout, fi);
             var famSrcY = coupleLineBottomY(parentId, pLayout, fi) + this.FORK_SOURCE_OFFSET;
+            
+            // Add staggered offset from spouse connectors so forks originate from staggered positions
+            if (staggeredOffsets[parentId] && staggeredOffsets[parentId][fi] !== undefined) {
+                famSrcY += staggeredOffsets[parentId][fi];
+            }
+            
             var targets = [];
             for (var gi = 0; gi < items.length; gi++) {
                 var t = targetXForChild(items[gi].childId, items[gi].edge);
-                if (t) targets.push(t);
+                if (t) {
+                    t.y = minGlobalY; // Force all siblings to same Y
+                    targets.push(t);
+                }
             }
             if (targets.length > 0) {
-                // Stagger bar Y so forks from different families don't overlap
-                var barRatio = familyGroupCount > 1
-                    ? 0.2 + (fki / (familyGroupCount - 1)) * 0.6
-                    : 0.5;
+                // Keep primary family branch at baseline level; offset later families only.
+                var barRatio = 0.5;
+                if (familyGroupCount > 1 && fi !== primaryFamilyIndex) {
+                    var offsetIdx = Math.max(0, fki - 1);
+                    // Move secondary families upward from the baseline branch.
+                    barRatio = Math.max(0.16, 0.30 - offsetIdx * 0.08);
+                }
                 this.drawFork(ctx, srcX, famSrcY, targets, R, barRatio);
             }
         }
@@ -1234,6 +1289,11 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             if (pNode && pNode.families && pNode.families.length > 0) {
                 defSrcX = coupleLineCenterX(parentId, pLayout, 0);
                 defSrcY = coupleLineBottomY(parentId, pLayout, 0) + this.FORK_SOURCE_OFFSET;
+                
+                // Add staggered offset from first spouse connector
+                if (staggeredOffsets[parentId] && staggeredOffsets[parentId][0] !== undefined) {
+                    defSrcY += staggeredOffsets[parentId][0];
+                }
             } else {
                 defSrcX = pLayout.centerX;
                 defSrcY = srcY;
@@ -1241,7 +1301,10 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             var targets = [];
             for (var gi = 0; gi < defaultGroup.length; gi++) {
                 var t = targetXForChild(defaultGroup[gi].childId, defaultGroup[gi].edge);
-                if (t) targets.push(t);
+                if (t) {
+                    t.y = minGlobalY; // Force all siblings to same Y
+                    targets.push(t);
+                }
             }
             if (targets.length > 0) {
                 this.drawFork(ctx, defSrcX, defSrcY, targets, R);
@@ -1266,23 +1329,34 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
         if (targets[i].y < nearestY) nearestY = targets[i].y;
     }
 
-    var barY = Math.round(srcY + (nearestY - srcY) * barYRatio);
-
-    // Keep a minimum vertical gap from both source and target to reduce
-    // visual collisions with couple-line/marriage area and card tops.
-    var minGapFromSource = 24;
+    // Keep sibling bars aligned by anchoring barY to the child row,
+    // then apply a small family-group stagger to avoid vertical overlap
+    // between different marriage branches.
+    var preferredGapFromTarget = 22;
+    var minGapFromSource = 10;
     var minGapFromTarget = 8;
+
+    // barYRatio is provided by caller per family-group (0.2..0.8).
+    // Map it to a small vertical offset around the aligned baseline.
+    var groupYOffset = 0;
+    if (barYRatio !== undefined) {
+        groupYOffset = Math.round((barYRatio - 0.5) * 36);
+    }
+
+    var barY = nearestY - preferredGapFromTarget + groupYOffset;
     var minBarY = srcY + minGapFromSource;
     var maxBarY = nearestY - minGapFromTarget;
-    if (minBarY <= maxBarY) {
-        if (barY < minBarY) barY = minBarY;
-        if (barY > maxBarY) barY = maxBarY;
-    } else {
-        // Very tight vertical space: place the bar as low as possible,
-        // prioritizing separation from the couple-level horizontal connector.
+
+    if (barY < minBarY) barY = minBarY;
+    if (barY > maxBarY) barY = maxBarY;
+
+    // Tight-space fallback (source and target nearly touching)
+    if (minBarY > maxBarY) {
         barY = nearestY - 2;
         if (barY < srcY + 3) barY = srcY + 3;
     }
+
+    barY = Math.round(barY);
 
     // Helper: draw a small filled circle
     function drawDot(x, y) {
@@ -1295,30 +1369,40 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
     if (targets.length === 1 && Math.abs(targets[0].x - srcX) < 2) {
         ctx.beginPath();
         ctx.moveTo(srcX, srcY);
-        ctx.lineTo(srcX, targets[0].y);
+        ctx.lineTo(srcX, targets[0].y - dotRadius);
         ctx.stroke();
         drawDot(srcX, targets[0].y);
         return;
     }
 
-    // Single child offset — L-shape with rounded corner
+    // Single child offset — L-shape with rounded corners (arcTo for consistency)
     if (targets.length === 1) {
         var tx = targets[0].x;
         var ty = targets[0].y;
         var dir = tx > srcX ? 1 : -1;
-        var r = Math.min(R, Math.abs(tx - srcX), Math.abs(barY - srcY), Math.abs(ty - barY));
-        // Keep corner visibly rounded whenever there is enough room.
-        if (Math.abs(tx - srcX) > 6 && Math.abs(barY - srcY) > 6 && Math.abs(ty - barY) > 6) {
-            r = Math.max(2, r);
+        var r = Math.min(R, Math.abs(tx - srcX) / 2, Math.abs(barY - srcY), Math.abs(ty - barY));
+        if (Math.abs(tx - srcX) > 3 && Math.abs(barY - srcY) > 6 && Math.abs(ty - barY) > 6) {
+            r = Math.max(3, r);
         }
 
         ctx.beginPath();
         ctx.moveTo(srcX, srcY);
-        ctx.lineTo(srcX, barY - r);
-        ctx.quadraticCurveTo(srcX, barY, srcX + dir * r, barY);
-        ctx.lineTo(tx - dir * r, barY);
-        ctx.quadraticCurveTo(tx, barY, tx, barY + r);
-        ctx.lineTo(tx, ty);
+
+        if (r >= 1) {
+            // Corner 1: vertical trunk -> horizontal bar
+            ctx.lineTo(srcX, barY - r);
+            ctx.arcTo(srcX, barY, srcX + dir * r, barY, r);
+
+            // Corner 2: horizontal bar -> vertical drop
+            ctx.lineTo(tx - dir * r, barY);
+            ctx.arcTo(tx, barY, tx, barY + r, r);
+        } else {
+            ctx.lineTo(srcX, barY);
+            ctx.lineTo(tx, barY);
+        }
+
+        // Final vertical segment ends at top edge of endpoint dot
+        ctx.lineTo(tx, ty - dotRadius);
         ctx.stroke();
         drawDot(tx, ty);
         return;
@@ -1328,49 +1412,93 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
     // This avoids re-drawing overlapping paths for each child, which can
     // look like "spaghetti" on dense trees with multiple families.
     targets.sort(function (a, b) { return a.x - b.x; });
-    var minX = targets[0].x;
-    var maxX = targets[targets.length - 1].x;
+    var minX = Infinity;
+    var maxX = -Infinity;
+
+    // Compute where each drop/elbow actually starts on the bar, so the bar
+    // doesn't extend past rounded corners and create a "too long" look.
+    for (var bi = 0; bi < targets.length; bi++) {
+        var btx = targets[bi].x;
+        var bty = targets[bi].y;
+        var bdx = btx - srcX;
+        var bdir = bdx > 0 ? 1 : (bdx < 0 ? -1 : 0);
+        var br = Math.min(R, Math.abs(bdx), Math.abs(bty - barY));
+        if (Math.abs(bdx) > 3 && Math.abs(bty - barY) > 5) {
+            br = Math.max(2, br);
+        }
+        var barAttachX = (bdir === 0 || br < 1) ? btx : (btx - bdir * br);
+
+        if (barAttachX < minX) minX = barAttachX;
+        if (barAttachX > maxX) maxX = barAttachX;
+    }
 
     // Ensure horizontal bar always intersects the source trunk.
     if (srcX < minX) minX = srcX;
     if (srcX > maxX) maxX = srcX;
 
-    // Trunk with rounded corner to bar
-    var cornerR = Math.min(R, 4);
+    // Tiny overlap at joins helps avoid anti-aliased gaps when zoomed out.
+    var joinOverlap = 1;
+
+    // Draw trunk + bar with rounded elbow for one-sided forks
+    var hasLeft = minX < srcX;
+    var hasRight = maxX > srcX;
+    var joinR = Math.min(R, 6, Math.abs(barY - srcY));
+
     ctx.beginPath();
     ctx.moveTo(srcX, srcY);
-    if (barY - srcY > cornerR * 2) {
-        ctx.lineTo(srcX, barY - cornerR);
-        ctx.quadraticCurveTo(srcX, barY, srcX, barY);  // Curve at junction
+
+    if (hasLeft && !hasRight && joinR >= 1) {
+        // Only left branch: rounded corner from trunk to left bar
+        ctx.lineTo(srcX, barY - joinR);
+        ctx.arcTo(srcX, barY, srcX - joinR, barY, joinR);
+        ctx.lineTo(minX, barY);
+    } else if (hasRight && !hasLeft && joinR >= 1) {
+        // Only right branch: rounded corner from trunk to right bar
+        ctx.lineTo(srcX, barY - joinR);
+        ctx.arcTo(srcX, barY, srcX + joinR, barY, joinR);
+        ctx.lineTo(maxX, barY);
     } else {
-        ctx.lineTo(srcX, barY);
+        // T-junction (or tiny space): keep centered trunk with bar sections
+        ctx.lineTo(srcX, barY + joinOverlap);
+        if (hasLeft) {
+            ctx.moveTo(minX, barY);
+            ctx.lineTo(srcX + joinOverlap, barY);
+        }
+        if (hasRight) {
+            if (!hasLeft) {
+                ctx.moveTo(srcX, barY);
+            }
+            ctx.lineTo(maxX, barY);
+        }
     }
+
     ctx.stroke();
 
-    // Horizontal fork bar
-    ctx.beginPath();
-    ctx.moveTo(minX, barY);
-    ctx.lineTo(maxX, barY);
-    ctx.stroke();
-
-    // Individual drops to each child with rounded corners at bar junction
+    // Individual drops to each child with same rounded elbow style.
     for (var i = 0; i < targets.length; i++) {
         var tx = targets[i].x;
         var ty = targets[i].y;
-        var dropH = ty - barY;
-
-        ctx.beginPath();
-        ctx.moveTo(tx, barY);
-        if (dropH > cornerR * 2) {
-            // Smooth rounded corner from bar downward
-            ctx.lineTo(tx, barY + cornerR);
-            ctx.quadraticCurveTo(tx, barY, tx, barY + cornerR);
-            ctx.lineTo(tx, ty);
-        } else {
-            // Tight space - straight drop
-            ctx.lineTo(tx, ty);
+        var dx = tx - srcX;
+        var dir = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+        var r = Math.min(R, Math.abs(dx), Math.abs(ty - barY));
+        if (Math.abs(dx) > 3 && Math.abs(ty - barY) > 6) {
+            r = Math.max(3, r);
         }
-        ctx.stroke();
+
+        // Directly below trunk: straight drop
+        if (dir === 0 || r < 1) {
+            ctx.beginPath();
+            ctx.moveTo(tx, barY - joinOverlap);
+            ctx.lineTo(tx, ty - dotRadius);
+            ctx.stroke();
+        } else {
+            // Rounded elbow from bar into drop for consistent appearance
+            ctx.beginPath();
+            ctx.moveTo(tx - dir * r - dir * joinOverlap, barY);
+            ctx.arcTo(tx, barY, tx, barY + r, r);
+            ctx.lineTo(tx, ty - dotRadius);
+            ctx.stroke();
+        }
 
         drawDot(tx, ty);
     }

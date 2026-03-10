@@ -305,13 +305,18 @@
     content: '';
     position: absolute;
     top: 50%;
-    bottom: -1px;
+    bottom: -2px;
     left: 50%;
     width: 2px;
     background: #c0c6d0;
     transform: translateX(-50%);
     z-index: 0;
     border-radius: 1px;
+}
+
+/* Hide CSS drop for staggered multi-marriage (canvas draws it instead) */
+.sp-couple-line-staggered::after {
+    display: none;
 }
 
 .sp-couple-rings {
