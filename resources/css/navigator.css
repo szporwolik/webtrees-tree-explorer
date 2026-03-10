@@ -703,3 +703,432 @@
         border: 1px solid #ccc;
     }
 }
+
+/* =====================================================================
+   PORTABLE THEME LAYER (SCOPED)
+   Semantic tokens + host variable mapping for light/dark/high-contrast
+   ===================================================================== */
+
+.wtp-plugin-root {
+    /* Host mapping block with safe fallbacks */
+    --wtp-bg: var(--bs-body-bg, #ffffff);
+    --wtp-bg-elevated: var(--bs-secondary-bg, #f8f9fa);
+    --wtp-surface: var(--bs-tertiary-bg, #f1f3f5);
+    --wtp-text: var(--bs-body-color, #212529);
+    --wtp-text-muted: var(--bs-secondary-color, #6c757d);
+    --wtp-link: var(--bs-link-color, var(--bs-primary, #0d6efd));
+    --wtp-link-hover: var(--bs-link-hover-color, #0a58ca);
+    --wtp-border: var(--bs-border-color, #dee2e6);
+    --wtp-border-strong: var(--bs-secondary-color, #adb5bd);
+    --wtp-accent: var(--bs-primary, #0d6efd);
+    --wtp-accent-hover: #0b5ed7;
+    --wtp-focus: var(--bs-primary, #0d6efd);
+    --wtp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+    --wtp-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.16);
+    --wtp-radius-sm: 0.25rem;
+    --wtp-radius-md: 0.625rem;
+    --wtp-transition-fast: 120ms ease;
+    --wtp-transition: 200ms ease;
+
+    /* Hourglass-like card palette (with host-safe fallbacks) */
+    --wtp-card-male-bg: var(--wtp-bg);
+    --wtp-card-male-border: color-mix(in srgb, var(--wtp-accent) 45%, var(--wtp-border));
+    --wtp-card-female-bg: var(--wtp-bg);
+    --wtp-card-female-border: #e8a7c4;
+    --wtp-card-unknown-bg: var(--wtp-bg);
+    --wtp-card-unknown-border: var(--wtp-border);
+
+    color: var(--wtp-text);
+}
+
+/* Keyboard focus and control readability */
+.wtp-plugin-root :is(button, input, select, textarea, [tabindex], a):focus-visible {
+    outline: 2px solid var(--wtp-focus);
+    outline-offset: 2px;
+}
+
+.wtp-plugin-root :is(input, select, textarea)::placeholder {
+    color: var(--wtp-text-muted);
+    opacity: 1;
+}
+
+.wtp-plugin-root :is(input, select, textarea):disabled,
+.wtp-plugin-root :is(button):disabled {
+    color: color-mix(in srgb, var(--wtp-text) 55%, transparent);
+    border-color: var(--wtp-border);
+    background: color-mix(in srgb, var(--wtp-bg-elevated) 75%, var(--wtp-bg));
+    opacity: 1;
+}
+
+/* Core surfaces */
+.wtp-plugin-root .sp-navigator {
+    background: var(--wtp-bg-elevated);
+    border: 1px solid var(--wtp-border);
+    border-radius: var(--wtp-radius-md);
+}
+
+.wtp-plugin-root .sp-toolbar {
+    background: var(--wtp-bg);
+    border: 1px solid var(--wtp-border-strong);
+    border-radius: var(--wtp-radius-sm);
+    box-shadow: var(--wtp-shadow-sm);
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    width: max-content;
+    max-width: calc(100% - 20px);
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.wtp-plugin-root .sp-toolbar .sp-btn {
+    border: 1px solid var(--wtp-border);
+    background: var(--wtp-bg);
+    color: var(--wtp-text);
+    border-radius: var(--wtp-radius-sm);
+    transition: background var(--wtp-transition-fast), color var(--wtp-transition-fast), border-color var(--wtp-transition-fast);
+    flex: 0 0 auto;
+}
+
+.wtp-plugin-root .sp-toolbar .sp-btn:hover {
+    background: var(--wtp-surface);
+    border-color: var(--wtp-border-strong);
+}
+
+.wtp-plugin-root .sp-toolbar .sp-btn.sp-active {
+    color: var(--wtp-accent);
+    background: color-mix(in srgb, var(--wtp-accent) 16%, var(--wtp-bg));
+}
+
+.wtp-plugin-root .sp-btn-go {
+    background: var(--wtp-accent) !important;
+    border-color: var(--wtp-accent) !important;
+    color: #fff !important;
+}
+
+.wtp-plugin-root .sp-btn-go:not(:disabled):hover {
+    background: var(--wtp-accent-hover) !important;
+    border-color: var(--wtp-accent-hover) !important;
+}
+
+.wtp-plugin-root .sp-btn-go:disabled {
+    background: var(--wtp-surface) !important;
+    border-color: var(--wtp-border) !important;
+    color: var(--wtp-text-muted) !important;
+}
+
+.wtp-plugin-root .sp-toolbar-sep {
+    background: var(--wtp-border);
+}
+
+/* Forms */
+.wtp-plugin-root .sp-search-input,
+.wtp-plugin-root :is(input[type="text"], input[type="search"], select, textarea).wtp-input,
+.wtp-plugin-root .wt-page-options :is(input[type="text"], select, textarea) {
+    min-height: calc(1.5em + 0.5rem + 2px);
+    line-height: 1.5;
+    color: var(--wtp-text);
+    background: var(--wtp-bg);
+    border: 1px solid var(--wtp-border);
+    border-radius: var(--wtp-radius-sm);
+}
+
+.wtp-plugin-root .sp-search-input:focus,
+.wtp-plugin-root .wt-page-options :is(input[type="text"], select, textarea):focus {
+    border-color: var(--wtp-focus);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--wtp-focus) 24%, transparent);
+}
+
+.wtp-plugin-root .wt-page-options-label,
+.wtp-plugin-root .sp-page-heading {
+    color: var(--wtp-text);
+}
+
+.wtp-plugin-root .wt-page-options .btn,
+.wtp-plugin-root .wt-page-options button,
+.wtp-plugin-root .wt-page-options input[type="submit"] {
+    border-radius: var(--wtp-radius-sm);
+    border: 1px solid var(--wtp-border);
+    transition: background var(--wtp-transition-fast), color var(--wtp-transition-fast), border-color var(--wtp-transition-fast);
+}
+
+/* Cards and links */
+.wtp-plugin-root .sp-card {
+    background: var(--wtp-bg);
+    color: var(--wtp-text);
+    border-color: var(--wtp-border);
+    border-radius: calc(var(--wtp-radius-md) + 2px);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    transition: box-shadow var(--wtp-transition), transform var(--wtp-transition-fast);
+}
+
+.wtp-plugin-root .sp-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
+}
+
+.wtp-plugin-root .sp-card.sp-male {
+    background: var(--wtp-card-male-bg);
+    border-color: var(--wtp-card-male-border);
+}
+
+.wtp-plugin-root .sp-card.sp-female {
+    background: var(--wtp-card-female-bg);
+    border-color: var(--wtp-card-female-border);
+}
+
+.wtp-plugin-root .sp-card.sp-unknown {
+    background: var(--wtp-card-unknown-bg);
+    border-color: var(--wtp-card-unknown-border);
+}
+
+.wtp-plugin-root .sp-card.sp-origin {
+    border-width: 2px;
+}
+
+.wtp-plugin-root .sp-card.sp-origin.sp-male {
+    border-color: color-mix(in srgb, var(--wtp-card-male-border) 82%, var(--wtp-accent));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--wtp-accent) 28%, transparent), 0 4px 14px rgba(0, 0, 0, 0.14);
+}
+
+.wtp-plugin-root .sp-card.sp-origin.sp-female {
+    border-color: color-mix(in srgb, var(--wtp-card-female-border) 86%, #d56aa0);
+    box-shadow: 0 0 0 1px color-mix(in srgb, #d56aa0 22%, transparent), 0 4px 14px rgba(0, 0, 0, 0.14);
+}
+
+.wtp-plugin-root .sp-name {
+    color: var(--wtp-text);
+}
+
+.wtp-plugin-root .sp-name:hover {
+    color: var(--wtp-link-hover);
+}
+
+.wtp-plugin-root .sp-years,
+.wtp-plugin-root .sp-search-years,
+.wtp-plugin-root .sp-card-actions a {
+    color: var(--wtp-text-muted);
+}
+
+.wtp-plugin-root .sp-card-actions {
+    border-top: 1px solid var(--wtp-border);
+}
+
+.wtp-plugin-root .sp-card-actions a:hover {
+    color: var(--wtp-text);
+    background: var(--wtp-surface);
+}
+
+/* Dropdown/autocomplete */
+.wtp-plugin-root .sp-search-results {
+    z-index: 1000;
+    background: var(--wtp-bg);
+    border: 1px solid var(--wtp-border);
+    border-radius: var(--wtp-radius-sm);
+    box-shadow: var(--wtp-shadow-md);
+}
+
+.wtp-plugin-root .sp-search-item {
+    border-bottom: 1px solid var(--wtp-border);
+}
+
+.wtp-plugin-root .sp-search-item:hover {
+    background: color-mix(in srgb, var(--wtp-accent) 10%, var(--wtp-bg));
+}
+
+.wtp-plugin-root .sp-search-name {
+    color: var(--wtp-text);
+}
+
+/* Loading and states */
+.wtp-plugin-root .sp-loading-overlay {
+    z-index: 1040;
+    background: color-mix(in srgb, var(--wtp-bg-elevated) 78%, transparent);
+}
+
+.wtp-plugin-root .sp-loading-spinner {
+    border-color: var(--wtp-border);
+    border-top-color: var(--wtp-accent);
+}
+
+.wtp-plugin-root .sp-lazy-placeholder {
+    border-color: var(--wtp-border);
+    color: var(--wtp-text-muted);
+    background: color-mix(in srgb, var(--wtp-bg) 78%, transparent);
+    border-radius: 999px;
+}
+
+.wtp-plugin-root .sp-lazy-placeholder:hover {
+    border-color: var(--wtp-accent);
+    color: var(--wtp-link-hover);
+    background: color-mix(in srgb, var(--wtp-accent) 10%, var(--wtp-bg));
+}
+
+/* Generic scoped utility components for plugin expansion */
+.wtp-plugin-root .wtp-card,
+.wtp-plugin-root .wtp-panel,
+.wtp-plugin-root .wtp-surface {
+    background: var(--wtp-bg);
+    color: var(--wtp-text);
+    border: 1px solid var(--wtp-border);
+    border-radius: var(--wtp-radius-md);
+    box-shadow: var(--wtp-shadow-sm);
+}
+
+.wtp-plugin-root .wtp-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.5rem;
+    border: 1px solid var(--wtp-border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--wtp-accent) 14%, var(--wtp-bg));
+    color: var(--wtp-text);
+}
+
+.wtp-plugin-root .wtp-alert,
+.wtp-plugin-root .wtp-toast {
+    border: 1px solid var(--wtp-border-strong);
+    border-radius: var(--wtp-radius-sm);
+    background: var(--wtp-bg);
+    color: var(--wtp-text);
+    box-shadow: var(--wtp-shadow-sm);
+}
+
+.wtp-plugin-root .wtp-empty,
+.wtp-plugin-root .wtp-error,
+.wtp-plugin-root .wtp-loading {
+    border: 1px dashed var(--wtp-border-strong);
+    border-radius: var(--wtp-radius-md);
+    padding: 0.875rem;
+    background: color-mix(in srgb, var(--wtp-bg-elevated) 78%, var(--wtp-bg));
+    color: var(--wtp-text-muted);
+}
+
+/* Tables and lists */
+.wtp-plugin-root .wtp-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.wtp-plugin-root :is(table, .wtp-table) {
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--wtp-text);
+    background: var(--wtp-bg);
+}
+
+.wtp-plugin-root :is(table, .wtp-table) :is(th, td) {
+    border: 1px solid var(--wtp-border);
+    padding: 0.5rem 0.625rem;
+}
+
+.wtp-plugin-root :is(ul, ol).wtp-list,
+.wtp-plugin-root .wtp-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.wtp-plugin-root .wtp-list > * + * {
+    border-top: 1px solid var(--wtp-border);
+}
+
+/* Scoped overlay stack */
+.wtp-plugin-root .wtp-dropdown,
+.wtp-plugin-root .wtp-menu,
+.wtp-plugin-root .dropdown-menu,
+.wtp-plugin-root .sp-search-results {
+    z-index: 1000;
+}
+
+.wtp-plugin-root .wtp-backdrop,
+.wtp-plugin-root .sp-loading-overlay {
+    z-index: 1040;
+}
+
+.wtp-plugin-root .wtp-modal,
+.wtp-plugin-root .wtp-dialog {
+    z-index: 1050;
+}
+
+.wtp-plugin-root .wtp-tooltip,
+.wtp-plugin-root .wtp-popover {
+    z-index: 1070;
+}
+
+/* Modal/dialog/popover baselines */
+.wtp-plugin-root :is(.wtp-modal, .wtp-dialog, .wtp-popover, .wtp-tooltip) {
+    max-width: min(92vw, 40rem);
+    overflow-wrap: anywhere;
+    background: var(--wtp-bg);
+    color: var(--wtp-text);
+    border: 1px solid var(--wtp-border);
+    border-radius: var(--wtp-radius-md);
+    box-shadow: var(--wtp-shadow-md);
+}
+
+/* Responsive and overflow safety */
+.wtp-plugin-root .sp-search-input {
+    max-width: min(56vw, 220px);
+}
+
+.wtp-plugin-root .wt-page-options,
+.wtp-plugin-root .wtp-modal,
+.wtp-plugin-root .wtp-dialog,
+.wtp-plugin-root .wtp-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+@media (max-width: 768px) {
+    .wtp-plugin-root .sp-toolbar {
+        top: 8px;
+        left: 8px;
+        gap: 3px;
+        padding: 4px 6px;
+        max-width: calc(100% - 16px);
+    }
+
+    .wtp-plugin-root .sp-toolbar .sp-btn {
+        width: 30px;
+        height: 30px;
+        font-size: 14px;
+    }
+
+    .wtp-plugin-root .sp-search-input {
+        width: min(52vw, 176px);
+    }
+}
+
+/* Motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    .wtp-plugin-root *,
+    .wtp-plugin-root *::before,
+    .wtp-plugin-root *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* High-contrast support */
+@media (forced-colors: active) {
+    .wtp-plugin-root {
+        --wtp-bg: Canvas;
+        --wtp-bg-elevated: Canvas;
+        --wtp-surface: Canvas;
+        --wtp-text: CanvasText;
+        --wtp-text-muted: GrayText;
+        --wtp-link: LinkText;
+        --wtp-link-hover: LinkText;
+        --wtp-border: GrayText;
+        --wtp-border-strong: CanvasText;
+        --wtp-accent: Highlight;
+        --wtp-focus: Highlight;
+    }
+
+    .wtp-plugin-root :is(.sp-card, .sp-toolbar, .sp-search-results, .sp-loading-overlay) {
+        forced-color-adjust: auto;
+    }
+}
