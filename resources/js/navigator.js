@@ -70,7 +70,28 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.overlay        = document.getElementById(cardPrefix + '_overlay');
     this.searchInput    = document.getElementById(cardPrefix + '_searchInput');
     this.searchResults  = document.getElementById(cardPrefix + '_searchResults');
-    this.btnGo          = document.getElementById(cardPrefix + '_btnGo');
+    this.searchPanel    = document.getElementById(cardPrefix + '_searchPanel');
+    this.searchCancel   = document.getElementById(cardPrefix + '_searchCancel');
+    this.focusChip      = document.getElementById(cardPrefix + '_focusChip');
+    this.focusAvatar    = document.getElementById(cardPrefix + '_focusAvatar');
+    this.focusName      = document.getElementById(cardPrefix + '_focusName');
+
+    // Move search panel to document.body so it escapes overflow/backdrop-filter clipping
+    if (this.searchPanel) {
+        // Copy theme CSS custom properties from the plugin root to the panel
+        var pluginRoot = this.container ? this.container.closest('.wtp-plugin-root') : null;
+        if (pluginRoot) {
+            var rootStyles = getComputedStyle(pluginRoot);
+            var themeVars = ['--wtp-bg', '--wtp-bg-elevated', '--wtp-text', '--wtp-text-muted',
+                '--wtp-border', '--wtp-accent', '--wtp-accent-hover', '--wtp-focus',
+                '--wtp-shadow-md', '--wtp-radius-sm'];
+            for (var v = 0; v < themeVars.length; v++) {
+                var val = rootStyles.getPropertyValue(themeVars[v]);
+                if (val) this.searchPanel.style.setProperty(themeVars[v], val.trim());
+            }
+        }
+        document.body.appendChild(this.searchPanel);
+    }
 
     // Selected person xref from search
     this.selectedXref   = '';
@@ -931,16 +952,28 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     var actionsLeft = document.createElement('div');
     actionsLeft.className = 'sp-card-actions-left';
 
-    function quickAction(url, label, svgIcon) {
+    var sourceCount = Number.isFinite(personData.sourceCount) ? personData.sourceCount : 0;
+    var noteCount = Number.isFinite(personData.noteCount) ? personData.noteCount : 0;
+    var mediaCount = Number.isFinite(personData.mediaCount) ? personData.mediaCount : 0;
+
+    function quickAction(url, label, svgIcon, count) {
         if (!url) return null;
         var link = document.createElement('a');
         link.href = url;
         link.target = '_blank';
         link.rel = 'noopener';
         link.className = 'sp-card-action-link';
-        link.title = label;
+        if (count > 0) link.classList.add('sp-has-data');
+        link.title = label + (count > 0 ? ' (' + count + ')' : '');
         link.setAttribute('aria-label', label + ' for ' + personData.name);
         link.innerHTML = svgIcon;
+        if (count > 0) {
+            var badge = document.createElement('span');
+            badge.className = 'sp-action-count';
+            badge.textContent = count;
+            if (!nav.showSources) badge.style.display = 'none';
+            link.appendChild(badge);
+        }
         return link;
     }
 
@@ -948,28 +981,59 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     var noteIcon = '<svg viewBox="0 0 16 16" width="12" height="12"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="4" y1="5" x2="12" y2="5" stroke="currentColor" stroke-width="1.2"/><line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.2"/><line x1="4" y1="11" x2="9" y2="11" stroke="currentColor" stroke-width="1.2"/></svg>';
     var mediaIcon = '<svg viewBox="0 0 16 16" width="12" height="12"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5.5" cy="6.5" r="1.5" fill="currentColor"/><path d="M1.5 11l3-3 2 2 3-4 4 5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
 
-    var addSourceLink = quickAction(personData.addSourceUrl, 'Add source', srcIcon);
-    var addNoteLink = quickAction(personData.addNoteUrl, 'Add note', noteIcon);
-    var addMediaLink = quickAction(personData.addMediaUrl, 'Add media', mediaIcon);
+    var personUrl = personData.url || '';
+    var addSourceLink = quickAction(personUrl ? personUrl + '#sources_tab' : '', 'Sources', srcIcon, sourceCount);
+    var addNoteLink = quickAction(personUrl ? personUrl + '#notes' : '', 'Notes', noteIcon, noteCount);
+    var addMediaLink = quickAction(personUrl ? personUrl + '#media' : '', 'Media', mediaIcon, mediaCount);
     if (addSourceLink) actionsLeft.appendChild(addSourceLink);
     if (addNoteLink) actionsLeft.appendChild(addNoteLink);
     if (addMediaLink) actionsLeft.appendChild(addMediaLink);
-
-    var counters = document.createElement('span');
-    counters.className = 'sp-card-counters';
-    var sourceCount = Number.isFinite(personData.sourceCount) ? personData.sourceCount : 0;
-    var noteCount = Number.isFinite(personData.noteCount) ? personData.noteCount : 0;
-    counters.textContent = 'S:' + sourceCount + ' N:' + noteCount;
-    counters.title = 'Sources: ' + sourceCount + ' | Notes: ' + noteCount;
-    if (!nav.showSources) counters.style.display = 'none';
-    actionsLeft.appendChild(counters);
 
     actions.appendChild(actionsLeft);
 
     var actionsRight = document.createElement('div');
     actionsRight.className = 'sp-card-actions-right';
 
-    // Rebase/center tree button
+    // 1. Quick add note button
+    if (personData.addNoteUrl) {
+        var addNoteBtn = document.createElement('a');
+        addNoteBtn.href = personData.addNoteUrl;
+        addNoteBtn.target = '_blank';
+        addNoteBtn.rel = 'noopener';
+        addNoteBtn.className = 'sp-card-action-btn';
+        addNoteBtn.title = 'Add note';
+        addNoteBtn.setAttribute('aria-label', 'Add note for ' + personData.name);
+        addNoteBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="5" x2="8" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+        actionsRight.appendChild(addNoteBtn);
+    }
+
+    // 2. Edit family (relatives tab)
+    if (personData.url) {
+        var editFamilyLink = document.createElement('a');
+        editFamilyLink.href = personData.url + '#tab-relatives';
+        editFamilyLink.target = '_blank';
+        editFamilyLink.rel = 'noopener';
+        editFamilyLink.className = 'sp-card-action-btn';
+        editFamilyLink.title = 'Edit family';
+        editFamilyLink.setAttribute('aria-label', 'Edit family for ' + personData.name);
+        editFamilyLink.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><circle cx="5" cy="4" r="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1 13c0-2.5 2-4 4-4s4 1.5 4 4" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="4.5" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M9.5 13c0-2 1.3-3.2 2.8-3.2 .8 0 1.5.3 2 .8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
+        actionsRight.appendChild(editFamilyLink);
+    }
+
+    // 3. Edit person
+    if (personData.url) {
+        var viewLink = document.createElement('a');
+        viewLink.href = personData.url;
+        viewLink.target = '_blank';
+        viewLink.rel = 'noopener';
+        viewLink.className = 'sp-card-action-btn';
+        viewLink.title = 'Edit person';
+        viewLink.setAttribute('aria-label', 'Edit ' + personData.name);
+        viewLink.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><line x1="9.5" y1="3.5" x2="12.5" y2="6.5" stroke="currentColor" stroke-width="1.3"/></svg>';
+        actionsRight.appendChild(viewLink);
+    }
+
+    // 4. Rebase/center tree button
     if (personData.xref) {
         var rebaseBtn = document.createElement('button');
         rebaseBtn.type = 'button';
@@ -986,14 +1050,6 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         actionsRight.appendChild(rebaseBtn);
     }
 
-    var viewLink = document.createElement('a');
-    viewLink.href = personData.url;
-    viewLink.target = '_blank';
-    viewLink.rel = 'noopener';
-    viewLink.innerHTML = '&#x270E;';
-    viewLink.title = 'Edit person';
-    viewLink.setAttribute('aria-label', 'Edit ' + personData.name);
-    actionsRight.appendChild(viewLink);
     actions.appendChild(actionsRight);
     card.appendChild(actions);
 
@@ -2293,6 +2349,15 @@ FamilyNavigator.prototype.initToolbar = function () {
         });
     }
 
+    // Store button refs for enabling/disabling
+    this._toolbarButtons = {
+        zoomIn:     document.getElementById(prefix + '_btnZoomIn'),
+        zoomOut:    btnZoomOut,
+        zoomReset:  btnZoomReset,
+        fullscreen: btnFullscreen,
+        share:      btnShare
+    };
+
     // Sources toggle
     var toggleSources = document.getElementById(prefix + '_toggleSources');
     if (toggleSources) {
@@ -2303,7 +2368,43 @@ FamilyNavigator.prototype.initToolbar = function () {
         });
     }
 
-    // Focus person box — initial render
+    // Focus chip — click to open search panel
+    if (this.focusChip) {
+        this.focusChip.addEventListener('click', function () {
+            nav.openSearchPanel();
+        });
+        this.focusChip.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                nav.openSearchPanel();
+            }
+        });
+    }
+
+    // Search cancel button
+    if (this.searchCancel) {
+        this.searchCancel.addEventListener('click', function () {
+            nav.closeSearchPanel();
+        });
+    }
+
+    // Close search panel on Escape
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && nav.searchPanel && nav.searchPanel.classList.contains('sp-search-panel-open')) {
+            nav.closeSearchPanel();
+        }
+    });
+
+    // Close search panel on click outside
+    document.addEventListener('mousedown', function (e) {
+        if (nav.searchPanel && nav.searchPanel.classList.contains('sp-search-panel-open')) {
+            if (!nav.searchPanel.contains(e.target) && (!nav.focusChip || !nav.focusChip.contains(e.target))) {
+                nav.closeSearchPanel();
+            }
+        }
+    });
+
+    // Focus person chip — initial render
     nav._updateFocusPersonBox();
 };
 
@@ -2315,30 +2416,12 @@ FamilyNavigator.prototype.initSearch = function () {
     var nav = this;
     var searchTimeout = null;
 
-    if (!this.searchInput || !this.searchResults || !this.btnGo) return;
-
-    // Native fallback suggestions (works even if custom popup is hidden by theme CSS)
-    var datalistId = this.cardPrefix + '_searchDatalist';
-    var datalistEl = document.getElementById(datalistId);
-    if (!datalistEl) {
-        datalistEl = document.createElement('datalist');
-        datalistEl.id = datalistId;
-        document.body.appendChild(datalistEl);
-    }
-    this.searchDatalist = datalistEl;
-    this.searchInput.setAttribute('list', datalistId);
+    if (!this.searchInput || !this.searchResults) return;
 
     // Input handler with debounce
     this.searchInput.addEventListener('input', function () {
         var query = nav.searchInput.value.trim();
         nav.selectedXref = '';
-        nav.btnGo.disabled = true;
-
-        // If user picked a native datalist option, resolve xref immediately
-        if (nav.searchLookup[query]) {
-            nav.selectedXref = nav.searchLookup[query].xref;
-            nav.btnGo.disabled = false;
-        }
 
         if (searchTimeout) clearTimeout(searchTimeout);
 
@@ -2353,42 +2436,17 @@ FamilyNavigator.prototype.initSearch = function () {
         }, 300);
     });
 
-    // Close dropdown when clicking outside
-    document.addEventListener('click', function (e) {
-        if (!nav.searchInput.contains(e.target) && !nav.searchResults.contains(e.target)) {
-            nav.searchResults.classList.remove('sp-show');
-        }
-    });
-
-    // Focus input shows results if available
-    this.searchInput.addEventListener('focus', function () {
-        nav.searchResults.classList.remove('sp-show');
-    });
-
-    // Go button handler
-    this.btnGo.addEventListener('click', function () {
-        if (nav.selectedXref) {
-            nav.searchResults.classList.remove('sp-show');
-            nav.navigateTo(nav.selectedXref);
-            nav.searchInput.value = '';
-            nav.selectedXref = '';
-            nav.btnGo.disabled = true;
-        }
-    });
-
-    // Enter key in search input
+    // Enter key in search input — navigate to first result or selected
     this.searchInput.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter') return;
 
         if (!nav.selectedXref && nav.latestSearchResults && nav.latestSearchResults.length > 0) {
-            // Fallback: allow Enter to navigate to the first matched person
             nav.selectedXref = nav.latestSearchResults[0].xref;
-            nav.btnGo.disabled = false;
         }
 
         if (nav.selectedXref) {
             e.preventDefault();
-            nav.btnGo.click();
+            nav._navigateFromSearch(nav.selectedXref);
         }
     });
 };
@@ -2444,29 +2502,61 @@ FamilyNavigator.prototype.renderSearchResults = function (results) {
     this.searchResults.classList.remove('sp-show');
     this.searchLookup = {};
 
-    if (this.searchDatalist) {
-        this.searchDatalist.innerHTML = '';
+    if (!Array.isArray(results) || results.length === 0) {
+        if (this.searchInput && this.searchInput.value.trim().length >= 2) {
+            var noResult = document.createElement('div');
+            noResult.className = 'sp-search-item sp-no-result';
+            noResult.textContent = 'No results found';
+            this.searchResults.appendChild(noResult);
+            this.searchResults.classList.add('sp-show');
+        }
+        return;
     }
 
-    if (!Array.isArray(results)) {
-        results = [];
-    }
-
+    var nav = this;
     for (var i = 0; i < results.length; i++) {
         var item = results[i];
 
-        // Populate native datalist fallback suggestions.
-        var label = (item.name || '') + (item.years ? ' (' + item.years + ')' : '');
-        if (label) {
-            this.searchLookup[label] = { xref: item.xref, name: item.name };
-            if (this.searchDatalist) {
-                var opt = document.createElement('option');
-                opt.value = label;
-                this.searchDatalist.appendChild(opt);
-            }
+        // Visual result item
+        var el = document.createElement('div');
+        el.className = 'sp-search-item';
+        el.dataset.xref = item.xref;
+
+        if (item.thumb) {
+            var thumb = document.createElement('img');
+            thumb.className = 'sp-search-item-thumb';
+            thumb.src = item.thumb;
+            thumb.alt = '';
+            el.appendChild(thumb);
         }
 
+        var info = document.createElement('div');
+        info.className = 'sp-search-item-info';
+
+        var nameEl = document.createElement('span');
+        nameEl.className = 'sp-search-name';
+        nameEl.textContent = item.name || '?';
+        info.appendChild(nameEl);
+
+        if (item.years) {
+            var yearsEl = document.createElement('span');
+            yearsEl.className = 'sp-search-years';
+            yearsEl.textContent = item.years;
+            info.appendChild(yearsEl);
+        }
+
+        el.appendChild(info);
+
+        (function(xref) {
+            el.addEventListener('click', function () {
+                nav._navigateFromSearch(xref);
+            });
+        })(item.xref);
+
+        this.searchResults.appendChild(el);
     }
+
+    this.searchResults.classList.add('sp-show');
 };
 
 FamilyNavigator.prototype._escapeHtml = function (str) {
@@ -2593,20 +2683,21 @@ FamilyNavigator.prototype.hideOverlay = function () {
 // ==========================================================================
 
 /**
- * Update the focus-person info box in the toolbar with the current root person.
+ * Update the focus-person chip in the toolbar with the current root person.
  */
 FamilyNavigator.prototype._updateFocusPersonBox = function () {
-    var el = document.getElementById(this.cardPrefix + '_focusPerson');
-    if (!el) return;
+    if (!this.focusAvatar || !this.focusName) return;
 
     var rootNode = this.nodeMap && this.treeData ? this.nodeMap[this.treeData.rootId] : null;
     if (!rootNode || !rootNode.person) {
-        el.textContent = '';
+        this.focusAvatar.innerHTML = '';
+        this.focusName.textContent = 'Search person\u2026';
+        if (this.focusChip) this.focusChip.classList.add('sp-focus-chip-empty');
+        this._updateToolbarState(false);
         return;
     }
 
     var p = rootNode.person;
-    // If the current root xref is a spouse rather than the root person, show that spouse
     var displayPerson = p;
     if (this.currentRootXref && this.currentRootXref !== p.xref && rootNode.families) {
         for (var i = 0; i < rootNode.families.length; i++) {
@@ -2618,23 +2709,74 @@ FamilyNavigator.prototype._updateFocusPersonBox = function () {
         }
     }
 
-    el.innerHTML = '';
-    var icon = document.createElement('span');
-    icon.className = 'sp-focus-person-icon';
+    this.focusAvatar.innerHTML = '';
     if (displayPerson.thumb) {
         var img = document.createElement('img');
-        img.className = 'sp-focus-person-img';
+        img.className = 'sp-focus-chip-img';
         img.src = displayPerson.thumb;
         img.alt = displayPerson.name || '';
-        icon.appendChild(img);
+        this.focusAvatar.appendChild(img);
     } else {
-        icon.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M8 1a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-4 0-7 1.8-7 3v1h14v-1c0-1.2-3-3-7-3z" fill="currentColor"/></svg>';
+        this.focusAvatar.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 1a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-4 0-7 1.8-7 3v1h14v-1c0-1.2-3-3-7-3z" fill="currentColor"/></svg>';
     }
-    el.appendChild(icon);
-    var nameSpan = document.createElement('span');
-    nameSpan.className = 'sp-focus-person-name';
-    nameSpan.textContent = displayPerson.name || '?';
-    el.appendChild(nameSpan);
+
+    this.focusName.textContent = displayPerson.name || '?';
+    if (this.focusChip) this.focusChip.classList.remove('sp-focus-chip-empty');
+    this._updateToolbarState(true);
+};
+
+/**
+ * Enable or disable toolbar action buttons depending on whether a tree is loaded.
+ */
+FamilyNavigator.prototype._updateToolbarState = function (hasTree) {
+    if (!this._toolbarButtons) return;
+    var btns = this._toolbarButtons;
+    for (var key in btns) {
+        if (btns.hasOwnProperty(key) && btns[key]) {
+            btns[key].disabled = !hasTree;
+        }
+    }
+    // Also disable sources toggle
+    var toggleSources = document.getElementById(this.cardPrefix + '_toggleSources');
+    if (toggleSources) toggleSources.disabled = !hasTree;
+};
+
+// ==========================================================================
+// SEARCH PANEL — open / close / navigate
+// ==========================================================================
+
+FamilyNavigator.prototype.openSearchPanel = function () {
+    if (!this.searchPanel) return;
+
+    // Position the fixed panel below the focus chip
+    if (this.focusChip) {
+        var rect = this.focusChip.getBoundingClientRect();
+        this.searchPanel.style.top = (rect.bottom + 6) + 'px';
+        this.searchPanel.style.left = rect.left + 'px';
+    }
+
+    this.searchPanel.classList.add('sp-search-panel-open');
+    if (this.searchInput) {
+        this.searchInput.value = '';
+        this.searchInput.focus();
+    }
+    this.searchResults.innerHTML = '';
+    this.searchResults.classList.remove('sp-show');
+};
+
+FamilyNavigator.prototype.closeSearchPanel = function () {
+    if (!this.searchPanel) return;
+    this.searchPanel.classList.remove('sp-search-panel-open');
+    if (this.searchInput) this.searchInput.value = '';
+    this.searchResults.innerHTML = '';
+    this.searchResults.classList.remove('sp-show');
+    this.selectedXref = '';
+    this.latestSearchResults = [];
+};
+
+FamilyNavigator.prototype._navigateFromSearch = function (xref) {
+    this.closeSearchPanel();
+    this.navigateTo(xref);
 };
 
 // ==========================================================================
@@ -2649,7 +2791,7 @@ FamilyNavigator.prototype._toggleSourcesVisibility = function () {
     if (!container) return;
 
     var display = this.showSources ? '' : 'none';
-    var counters = container.querySelectorAll('.sp-card-counters, .sp-couple-metrics');
+    var counters = container.querySelectorAll('.sp-action-count, .sp-couple-metrics');
     for (var i = 0; i < counters.length; i++) {
         counters[i].style.display = display;
     }

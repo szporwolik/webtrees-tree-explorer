@@ -248,6 +248,7 @@ class FamilyTreeRenderer
         $personGedcom = $person->gedcom();
         $sourceCount = $this->countLevelOneTag($personGedcom, 'SOUR');
         $noteCount = $this->countLevelOneTag($personGedcom, 'NOTE');
+        $mediaCount = $this->countLevelOneTag($personGedcom, 'OBJE');
 
         return [
             'xref'     => $person->xref(),
@@ -262,23 +263,14 @@ class FamilyTreeRenderer
             'motherAgeAtBirth' => $motherAgeAtBirth,
             'sex'      => $person->sex(),
             'url'      => $person->url(),
-            'addMediaUrl' => route(AddNewFact::class, [
-                'tree' => $this->tree->name(),
-                'xref' => $person->xref(),
-                'fact' => 'OBJE',
-            ]),
             'addNoteUrl' => route(AddNewFact::class, [
                 'tree' => $this->tree->name(),
                 'xref' => $person->xref(),
                 'fact' => 'NOTE',
             ]),
-            'addSourceUrl' => route(AddNewFact::class, [
-                'tree' => $this->tree->name(),
-                'xref' => $person->xref(),
-                'fact' => 'SOUR',
-            ]),
             'sourceCount' => $sourceCount,
             'noteCount' => $noteCount,
+            'mediaCount' => $mediaCount,
             'thumb'    => $thumbUrl,
             'isDead'   => $person->isDead(),
             'isOrigin' => $isOrigin,
@@ -303,11 +295,10 @@ class FamilyTreeRenderer
             'motherAgeAtBirth' => null,
             'sex'         => $sex,
             'url'         => '',
-            'addMediaUrl' => '',
             'addNoteUrl'  => '',
-            'addSourceUrl' => '',
             'sourceCount' => 0,
             'noteCount'   => 0,
+            'mediaCount'  => 0,
             'thumb'       => null,
             'isDead'      => false,
             'isOrigin'    => false,
@@ -1114,27 +1105,95 @@ class FamilyTreeRenderer
             return json_encode($results);
         }
 
-        // Search individuals by name
-        $search = '%' . addcslashes($query, '\\%_') . '%';
+        $words = preg_split('/\s+/', $query, -1, PREG_SPLIT_NO_EMPTY);
+        $seen  = [];
 
-        $rows = DB::table('individuals')
-            ->where('i_file', '=', $tree->id())
-            ->where('i_gedcom', 'LIKE', $search)
-            ->limit(20)
-            ->get();
+        // --- Pass 1: strict AND — every word must appear ----------------
+        $dbQuery = DB::table('individuals')->where('i_file', '=', $tree->id());
+        foreach ($words as $word) {
+            $ascii = self::stripDiacritics($word);
+            if ($ascii !== $word) {
+                $p1 = '%' . addcslashes($word, '\\%_') . '%';
+                $p2 = '%' . addcslashes($ascii, '\\%_') . '%';
+                $dbQuery->where(static function ($q) use ($p1, $p2) {
+                    $q->where('i_gedcom', 'LIKE', $p1)
+                      ->orWhere('i_gedcom', 'LIKE', $p2);
+                });
+            } else {
+                $dbQuery->where('i_gedcom', 'LIKE', '%' . addcslashes($word, '\\%_') . '%');
+            }
+        }
+        foreach ($dbQuery->limit(20)->get() as $row) {
+            $seen[$row->i_id] = true;
+            $this->pushSearchResult($results, $row, $tree);
+        }
 
-        foreach ($rows as $row) {
-            $individual = Registry::individualFactory()->make($row->i_id, $tree);
-            if ($individual instanceof Individual && $individual->canShowName()) {
-                $results[] = [
-                    'xref'  => $individual->xref(),
-                    'name'  => strip_tags($individual->fullName()),
-                    'years' => strip_tags($individual->lifespan()),
-                ];
+        // --- Pass 2: prefix / fuzzy fallback if few results -------------
+        if (count($results) < 10) {
+            $dbQuery2 = DB::table('individuals')->where('i_file', '=', $tree->id());
+            $dbQuery2->where(static function ($outer) use ($words) {
+                foreach ($words as $word) {
+                    $prefix3 = mb_substr($word, 0, 3);
+                    $ascii   = self::stripDiacritics($prefix3);
+                    $outer->orWhere('i_gedcom', 'LIKE', '%' . addcslashes($prefix3, '\\%_') . '%');
+                    if ($ascii !== $prefix3) {
+                        $outer->orWhere('i_gedcom', 'LIKE', '%' . addcslashes($ascii, '\\%_') . '%');
+                    }
+                }
+            });
+            $remaining = 20 - count($results);
+            foreach ($dbQuery2->limit($remaining + count($seen))->get() as $row) {
+                if (!isset($seen[$row->i_id])) {
+                    $seen[$row->i_id] = true;
+                    $this->pushSearchResult($results, $row, $tree);
+                    if (count($results) >= 20) break;
+                }
             }
         }
 
+        // --- Rank: exact full-name hits first ---------------------------
+        $lowerQuery = mb_strtolower($query);
+        usort($results, static function ($a, $b) use ($lowerQuery) {
+            $aPos = mb_strpos(mb_strtolower($a['name']), $lowerQuery);
+            $bPos = mb_strpos(mb_strtolower($b['name']), $lowerQuery);
+            $aExact = $aPos !== false ? 0 : 1;
+            $bExact = $bPos !== false ? 0 : 1;
+            return $aExact <=> $bExact ?: ($aPos ?? 999) <=> ($bPos ?? 999);
+        });
+
         return json_encode($results, JSON_UNESCAPED_UNICODE);
+    }
+
+    private function pushSearchResult(array &$results, object $row, Tree $tree): void
+    {
+        $individual = Registry::individualFactory()->make($row->i_id, $tree);
+        if ($individual instanceof Individual && $individual->canShowName()) {
+            $results[] = [
+                'xref'  => $individual->xref(),
+                'name'  => strip_tags($individual->fullName()),
+                'years' => strip_tags($individual->lifespan()),
+            ];
+        }
+    }
+
+    private static function stripDiacritics(string $text): string
+    {
+        if (function_exists('transliterator_transliterate')) {
+            return transliterator_transliterate('Any-Latin; Latin-ASCII', $text);
+        }
+        $map = ['à'=>'a','á'=>'a','â'=>'a','ã'=>'a','ä'=>'a','å'=>'a','ą'=>'a',
+                 'ć'=>'c','č'=>'c','ç'=>'c','è'=>'e','é'=>'e','ê'=>'e','ë'=>'e','ę'=>'e',
+                 'ì'=>'i','í'=>'i','î'=>'i','ï'=>'i','ł'=>'l','ñ'=>'n','ń'=>'n',
+                 'ò'=>'o','ó'=>'o','ô'=>'o','õ'=>'o','ö'=>'o','ø'=>'o',
+                 'ś'=>'s','š'=>'s','ù'=>'u','ú'=>'u','û'=>'u','ü'=>'u',
+                 'ý'=>'y','ÿ'=>'y','ź'=>'z','ż'=>'z','ž'=>'z',
+                 'À'=>'A','Á'=>'A','Â'=>'A','Ã'=>'A','Ä'=>'A','Å'=>'A','Ą'=>'A',
+                 'Ć'=>'C','Č'=>'C','Ç'=>'C','È'=>'E','É'=>'E','Ê'=>'E','Ë'=>'E','Ę'=>'E',
+                 'Ì'=>'I','Í'=>'I','Î'=>'I','Ï'=>'I','Ł'=>'L','Ñ'=>'N','Ń'=>'N',
+                 'Ò'=>'O','Ó'=>'O','Ô'=>'O','Õ'=>'O','Ö'=>'O','Ø'=>'O',
+                 'Ś'=>'S','Š'=>'S','Ù'=>'U','Ú'=>'U','Û'=>'U','Ü'=>'U',
+                 'Ý'=>'Y','Ź'=>'Z','Ż'=>'Z','Ž'=>'Z'];
+        return strtr($text, $map);
     }
 
     /**

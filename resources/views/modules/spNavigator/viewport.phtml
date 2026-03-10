@@ -19,37 +19,52 @@ use Fisharebest\Webtrees\I18N;
             <div class="sp-loading-spinner"></div>
         </div>
         <div id="<?= $prefix ?>_toolbar" class="sp-toolbar">
-            <div class="sp-search-box">
-                <input type="text" id="<?= $prefix ?>_searchInput" class="sp-search-input" placeholder="<?= I18N::translate('Search person...') ?>" autocomplete="off">
-                <div id="<?= $prefix ?>_searchResults" class="sp-search-results"></div>
+            <div id="<?= $prefix ?>_focusChip" class="sp-focus-chip" tabindex="0" role="button" aria-label="<?= I18N::translate('Change person') ?>">
+                <span id="<?= $prefix ?>_focusAvatar" class="sp-focus-chip-avatar"></span>
+                <span id="<?= $prefix ?>_focusName" class="sp-focus-chip-name"><?= I18N::translate('Search person...') ?></span>
+                <span class="sp-focus-chip-swap" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 9h12.2l-3.6-3.6 1.4-1.4 6 6-6 6-1.4-1.4L16.2 11H4V9z" fill="currentColor"/><path d="M20 15H7.8l3.6 3.6-1.4 1.4-6-6 6-6 1.4 1.4L7.8 13H20v2z" fill="currentColor"/></svg>
+                </span>
             </div>
-            <button id="<?= $prefix ?>_btnGo" class="sp-btn sp-btn-go" title="<?= I18N::translate('Go to selected person') ?>" disabled>
-                &#x27A4;
-            </button>
+            <div id="<?= $prefix ?>_searchPanel" class="sp-search-panel">
+                <div class="sp-search-panel-input-wrap">
+                    <span class="sp-search-panel-icon" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" width="14" height="14"><circle cx="6.5" cy="6.5" r="5" fill="none" stroke="currentColor" stroke-width="1.7"/><line x1="10" y1="10" x2="15" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    </span>
+                    <input type="text" id="<?= $prefix ?>_searchInput" class="sp-search-input" placeholder="<?= I18N::translate('Search person...') ?>" autocomplete="off">
+                </div>
+                <div id="<?= $prefix ?>_searchResults" class="sp-search-results"></div>
+                <button id="<?= $prefix ?>_searchCancel" class="sp-search-cancel" type="button">
+                    <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true"><path d="M2 2l12 12M14 2L2 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    <?= I18N::translate('Cancel') ?>
+                </button>
+            </div>
             <span class="sp-toolbar-sep"></span>
             <button id="<?= $prefix ?>_btnZoomOut" class="sp-btn" title="<?= I18N::translate('Zoom out') ?>">
-                &#x2796;
+                <svg viewBox="0 0 16 16" width="16" height="16"><line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
             </button>
             <button id="<?= $prefix ?>_btnZoomReset" class="sp-btn" title="<?= I18N::translate('Reset zoom & center') ?>">
                 <span id="<?= $prefix ?>_zoomDisplay" class="sp-zoom-display">100%</span>
             </button>
             <button id="<?= $prefix ?>_btnZoomIn" class="sp-btn" title="<?= I18N::translate('Zoom in') ?>">
-                &#x2795;
+                <svg viewBox="0 0 16 16" width="16" height="16"><line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="8" y1="3" x2="8" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
             </button>
             <button id="<?= $prefix ?>_btnFullscreen" class="sp-btn" title="<?= I18N::translate('Toggle fullscreen') ?>">
-                &#x26F6;
+                <svg viewBox="0 0 16 16" width="16" height="16"><path d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
+            <span class="sp-toolbar-sep"></span>
             <button id="<?= $prefix ?>_btnShare" class="sp-btn" title="<?= I18N::translate('Copy share link') ?>">
-                &#x1F517;
+                <svg viewBox="0 0 16 16" width="16" height="16"><path d="M6.5 9.5l3-3M5.5 7.5a3 3 0 0 1 0-4.24l1-1a3 3 0 0 1 4.24 4.24l-.5.5M10.5 8.5a3 3 0 0 1 0 4.24l-1 1a3 3 0 0 1-4.24-4.24l.5-.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <span class="sp-toolbar-sep"></span>
             <label class="sp-toggle-sources" title="<?= I18N::translate('Show source counts') ?>">
                 <input type="checkbox" id="<?= $prefix ?>_toggleSources" class="sp-toggle-input">
                 <span class="sp-toggle-switch"></span>
-                <span class="sp-toggle-label">S</span>
+                <span class="sp-toggle-icon" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" width="14" height="14"><path d="M2 1h8l4 4v9a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M9 1v4h4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+                </span>
+                <span class="sp-toggle-label"><?= I18N::translate('Sources') ?></span>
             </label>
-            <span class="sp-toolbar-spacer"></span>
-            <span id="<?= $prefix ?>_focusPerson" class="sp-focus-person"></span>
             <span id="<?= $prefix ?>_loader" class="sp-loader">&#x21BB;</span>
         </div>
 
