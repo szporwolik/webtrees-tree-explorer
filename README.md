@@ -5,7 +5,7 @@
 [![downloads](https://img.shields.io/github/downloads-pre/szporwolik/webtrees-tree-explorer/total?label=downloads&color=5cb85c)](https://github.com/szporwolik/webtrees-tree-explorer/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-An interactive family tree navigator for [webtrees](https://webtrees.net/) — the leading open-source genealogy application.
+An interactive family tree explorer for [webtrees](https://webtrees.net/) — the leading open-source genealogy application.
 
 Built to deliver a clean, modern card-based UI that feels cohesive and powerful for exploring multi-generational family trees. This module was inspired by the [webtrees Interactive Tree](https://webtrees.net/) and the excellent [huhwt-xtv](https://github.com/huhwt/huhwt-xtv) plugin by Hermann Hartenthaler. The goal was to create a convenient and familiar genealogy visualization for people used to popular web genealogy platforms, combining modern UI design with powerful navigation features.
 
@@ -17,7 +17,7 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 
 ## Features
 
-• Appears in the **Diagrams** menu as "Tree Navigator"  
+• Appears in the **Diagrams** menu as "Tree Explorer"  
 • Drag-and-pan canvas for exploring large trees  
 • Expand / collapse branches with click  
 • Center on root person  
@@ -41,7 +41,7 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 2. Copy the folder into your webtrees `modules_v4/` directory  
 3. Rename it as you prefer (e.g. `sp_tree_explorer`)  
 4. Go to **Control Panel → Modules → Charts** and enable the module  
-5. Access via **Diagrams → Tree Navigator** from any individual page
+5. Access via **Diagrams → Tree Explorer** from any individual page
 
 ## Requirements
 

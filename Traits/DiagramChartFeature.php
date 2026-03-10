@@ -34,12 +34,12 @@ trait DiagramChartFeature
 
     public function chartTitle(Individual $individual): string
     {
-        return I18N::translate('Tree Navigator');
+        return I18N::translate('Tree Explorer');
     }
 
     public function pageHeading(): string
     {
-        return I18N::translate('Tree Navigator');
+        return I18N::translate('Tree Explorer');
     }
 
     /**

@@ -2,7 +2,7 @@
 
 /**
  * SP Tree Explorer for webtrees
- * A family tree navigator with a modern, card-based UI
+ * A family tree explorer with a modern, card-based UI
  * Copyright (C) 2025-2026 Szymon Porwolik
  */
 
@@ -18,9 +18,10 @@ use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\Http\ViewResponseTrait;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Individual;
-use Fisharebest\Webtrees\Module\InteractiveTreeModule;
+use Fisharebest\Webtrees\Module\AbstractModule;
 use Fisharebest\Webtrees\Module\ModuleConfigTrait;
 use Fisharebest\Webtrees\Module\ModuleGlobalInterface;
+use Fisharebest\Webtrees\Module\ModuleGlobalTrait;
 use Fisharebest\Webtrees\Module\ModuleChartInterface;
 use Fisharebest\Webtrees\Module\ModuleConfigInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomInterface;
@@ -43,11 +44,12 @@ use SpTreeExplorer\FamilyNav\AppSettings;
  * @author  Szymon Porwolik <https://szymon.porwolik.com>
  * @license https://opensource.org/licenses/GPL-3.0 GNU General Public License v3.0
  */
-class SpTreeExplorer extends InteractiveTreeModule implements ModuleGlobalInterface, ModuleCustomInterface,
+class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, ModuleCustomInterface,
     ModuleChartInterface, ModuleConfigInterface
 {
     use ModuleCustomTrait;
     use ModuleConfigTrait;
+    use ModuleGlobalTrait;
     use DiagramChartFeature;
 
     /** @var string Module brand label */
@@ -98,17 +100,17 @@ class SpTreeExplorer extends InteractiveTreeModule implements ModuleGlobalInterf
 
     public function title(): string
     {
-        return I18N::translate('Tree Navigator');
+        return I18N::translate('Tree Explorer');
     }
 
     public function title_long(): string
     {
-        return I18N::translate('Tree Navigator');
+        return I18N::translate('Tree Explorer');
     }
 
     public function description(): string
     {
-        return I18N::translate('An interactive family tree navigator showing ancestors and descendants.');
+        return I18N::translate('An interactive tree explorer showing ancestors and descendants.');
     }
 
     /**
@@ -215,7 +217,7 @@ class SpTreeExplorer extends InteractiveTreeModule implements ModuleGlobalInterf
                     'cardHtml'    => $cardHtml,
                     'initScript'  => $initScript,
                     'module'      => $this->name(),
-                    'title'       => I18N::translate('Tree Navigator'),
+                    'title'       => I18N::translate('Tree Explorer'),
                     'pageHeading' => $this->pageHeading(),
                     'showForm'    => true,
                     'tree'        => $tree,

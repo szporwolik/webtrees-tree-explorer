@@ -2,7 +2,7 @@
 
 /**
  * SP Tree Explorer for webtrees
- * A family tree navigator with a modern, card-based UI
+ * A family tree explorer with a modern, card-based UI
  * Copyright (C) 2025-2026 Szymon Porwolik
  * See LICENSE.md file for further details.
  */

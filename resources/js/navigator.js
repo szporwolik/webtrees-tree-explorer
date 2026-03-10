@@ -2073,7 +2073,7 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
                         nav._mergeAncestorData(childNodeId, newData, lineIndex);
                     }
                 } catch (e) {
-                    console.error('SP Tree Navigator: ancestor expand parse error', e);
+                    console.error('SP Tree Explorer: ancestor expand parse error', e);
                 }
             }
         }
@@ -2172,7 +2172,7 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
                         nav._updateFocusPersonBox();
                     }
                 } catch (e) {
-                    console.error('SP Tree Navigator: navigate parse error', e);
+                    console.error('SP Tree Explorer: navigate parse error', e);
                 }
             }
         }
@@ -2212,7 +2212,7 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
                         nav.measureAndRender();
                     }
                 } catch (e) {
-                    console.error('SP Tree Navigator: expand parse error', e);
+                    console.error('SP Tree Explorer: expand parse error', e);
                     delete nav.nodeMap[lazyNodeId];
                     nav.measureAndRender();
                 }
@@ -2632,7 +2632,7 @@ FamilyNavigator.prototype.fetchSearchResults = function (query) {
                 nav.latestSearchResults = results;
                 nav.renderSearchResults(results);
             } catch (e) {
-                console.error('SP Tree Navigator: search parse error', e);
+                console.error('SP Tree Explorer: search parse error', e);
                 nav.latestSearchResults = [];
                 nav.renderSearchResults([]);
             }
