@@ -1231,15 +1231,4 @@ class FamilyTreeRenderer
         return strtr($text, $map);
     }
 
-    /**
-     * Return gender CSS class string.
-     */
-    public function genderCss(Individual $person): string
-    {
-        return match ($person->sex()) {
-            'M'     => 'sp-male',
-            'F'     => 'sp-female',
-            default => 'sp-unknown',
-        };
-    }
 }

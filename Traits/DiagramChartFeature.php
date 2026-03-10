@@ -9,14 +9,12 @@ declare(strict_types=1);
 
 namespace SpTreeExplorer\FamilyNav\Traits;
 
-use Fisharebest\Webtrees\Age;
-use Fisharebest\Webtrees\Date;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Individual;
 use Fisharebest\Webtrees\Menu;
 
 /**
- * Trait DiagramChartFeature — chart menu registration and title/subtitle rendering.
+ * Trait DiagramChartFeature — chart menu registration and title rendering.
  */
 trait DiagramChartFeature
 {
@@ -40,24 +38,6 @@ trait DiagramChartFeature
     public function pageHeading(): string
     {
         return I18N::translate('Tree Explorer');
-    }
-
-    /**
-     * Build a subtitle block showing the person's name, lifespan, and age.
-     */
-    public function buildSubtitle(Individual $individual): string
-    {
-        if ($individual->isDead()) {
-            $age = (string) new Age($individual->getBirthDate(), $individual->getDeathDate());
-        } else {
-            $today = new Date(strtoupper(date('d M Y')));
-            $age   = (string) new Age($individual->getBirthDate(), $today);
-        }
-
-        return view('modules/spNavigator/subtitle', [
-            'individual' => $individual,
-            'age'        => $age,
-        ]);
     }
 
     public function chartUrl(Individual $individual, array $parameters = []): string

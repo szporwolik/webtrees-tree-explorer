@@ -15,15 +15,13 @@ use Aura\Router\Map;
 use Fig\Http\Message\RequestMethodInterface;
 use fisharebest\Localization\Translation;
 use Fisharebest\Webtrees\Auth;
-use Fisharebest\Webtrees\Http\ViewResponseTrait;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Individual;
+use Fisharebest\Webtrees\Menu;
 use Fisharebest\Webtrees\Module\AbstractModule;
-use Fisharebest\Webtrees\Module\ModuleConfigTrait;
 use Fisharebest\Webtrees\Module\ModuleGlobalInterface;
 use Fisharebest\Webtrees\Module\ModuleGlobalTrait;
 use Fisharebest\Webtrees\Module\ModuleChartInterface;
-use Fisharebest\Webtrees\Module\ModuleConfigInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomTrait;
 use Fisharebest\Webtrees\Registry;
@@ -36,7 +34,6 @@ use Psr\Http\Message\ServerRequestInterface;
 use SpTreeExplorer\FamilyNav\SpTreeExplorerHandler;
 use SpTreeExplorer\FamilyNav\Module\FamilyTreeRenderer;
 use SpTreeExplorer\FamilyNav\Traits\DiagramChartFeature;
-use SpTreeExplorer\FamilyNav\AppSettings;
 
 /**
  * Class SpTreeExplorer
@@ -45,23 +42,11 @@ use SpTreeExplorer\FamilyNav\AppSettings;
  * @license https://opensource.org/licenses/GPL-3.0 GNU General Public License v3.0
  */
 class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, ModuleCustomInterface,
-    ModuleChartInterface, ModuleConfigInterface
+    ModuleChartInterface
 {
     use ModuleCustomTrait;
-    use ModuleConfigTrait;
     use ModuleGlobalTrait;
     use DiagramChartFeature;
-
-    /** @var string Module brand label */
-    private string $brandLabel;
-
-    /** @var AppSettings */
-    private $appSettings;
-
-    public function __construct()
-    {
-        $this->brandLabel = '';
-    }
 
     public function customModuleAuthorName(): string
     {
@@ -103,14 +88,22 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
         return I18N::translate('Tree Explorer');
     }
 
-    public function title_long(): string
-    {
-        return I18N::translate('Tree Explorer');
-    }
-
     public function description(): string
     {
         return I18N::translate('An interactive tree explorer showing ancestors and descendants.');
+    }
+
+    /**
+     * Diagrams chart menu entry.
+     */
+    public function chartMenu(Individual $individual): Menu
+    {
+        return new Menu(
+            $this->chartTitle($individual),
+            $this->chartUrl($individual),
+            $this->chartMenuClass(),
+            ['rel' => 'nofollow']
+        );
     }
 
     /**
@@ -125,11 +118,6 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
             'path' => $this->assetUrl('js/navigator.js'),
         ]);
         return $cssNav . ' ' . $jsNav;
-    }
-
-    public function bodyContent(): string
-    {
-        return '';
     }
 
     /**
@@ -151,7 +139,6 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
 
         View::registerCustomView('::modules/spNavigator/viewport', $this->name() . '::modules/spNavigator/viewport');
         View::registerCustomView('::modules/spNavigator/diagram', $this->name() . '::modules/spNavigator/diagram');
-        View::registerCustomView('::modules/spNavigator/subtitle', $this->name() . '::modules/spNavigator/subtitle');
     }
 
     /**
@@ -164,8 +151,6 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
         $xref = Validator::queryParams($request)->isXref()->string('xref', '');
 
         Auth::checkComponentAccess($this, ModuleChartInterface::class, $tree, $user);
-
-        $this->appSettings = new AppSettings($request);
 
         $individual = null;
         if ($xref !== '') {
