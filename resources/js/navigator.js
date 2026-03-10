@@ -5,6 +5,18 @@
  */
 
 /**
+ * Translation helper — returns translated string from PHP-injected dictionary.
+ * Supports %s placeholders replaced left-to-right by additional arguments.
+ */
+function __(key) {
+    var t = (window.wtpTranslations && window.wtpTranslations[key]) || key;
+    for (var i = 1; i < arguments.length; i++) {
+        t = t.replace('%s', arguments[i]);
+    }
+    return t;
+}
+
+/**
  * CSS color tokens cache - initialized once from CSS custom properties
  * Provides theme-portable colors for inline SVG generation
  */
@@ -877,7 +889,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         avatarWrap.appendChild(img);
     } else {
         avatarWrap.href = personData.url + '#media';
-        avatarWrap.title = 'Add photo';
+        avatarWrap.title = __('Add photo');
         avatarWrap.classList.add('sp-avatar-placeholder');
     }
     person.appendChild(avatarWrap);
@@ -891,7 +903,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     nameLink.href = personData.url;
     nameLink.target = '_blank';
     nameLink.rel = 'noopener';
-    nameLink.setAttribute('aria-label', 'View ' + personData.name + ' profile');
+    nameLink.setAttribute('aria-label', __('View %s profile', personData.name));
     
     var nameStrong = document.createElement('strong');
     nameStrong.textContent = personData.name;
@@ -906,8 +918,8 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     }
 
     var placeTitleParts = [];
-    if (personData.birthPlace) placeTitleParts.push('Birth place: ' + personData.birthPlace);
-    if (personData.deathPlace) placeTitleParts.push('Death place: ' + personData.deathPlace);
+    if (personData.birthPlace) placeTitleParts.push(__('Birth place:') + ' ' + personData.birthPlace);
+    if (personData.deathPlace) placeTitleParts.push(__('Death place:') + ' ' + personData.deathPlace);
     if (placeTitleParts.length > 0) {
         years.title = placeTitleParts.join(' | ');
         var placeMarker = document.createElement('span');
@@ -926,7 +938,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         if (hasFatherAge) {
             var fatherAge = document.createElement('span');
             fatherAge.className = 'sp-parent-age sp-parent-age-father';
-            fatherAge.title = 'Father\'s age at birth: ' + personData.fatherAgeAtBirth;
+            fatherAge.title = __("Father's age at birth:") + ' ' + personData.fatherAgeAtBirth;
 
             var fatherIcon = document.createElement('span');
             fatherIcon.className = 'sp-parent-age-icon';
@@ -944,7 +956,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         if (hasMotherAge) {
             var motherAge = document.createElement('span');
             motherAge.className = 'sp-parent-age sp-parent-age-mother';
-            motherAge.title = 'Mother\'s age at birth: ' + personData.motherAgeAtBirth;
+            motherAge.title = __("Mother's age at birth:") + ' ' + personData.motherAgeAtBirth;
 
             var motherIcon = document.createElement('span');
             motherIcon.className = 'sp-parent-age-icon';
@@ -985,7 +997,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         link.className = 'sp-card-action-link';
         if (count > 0) link.classList.add('sp-has-data');
         link.title = label + (count > 0 ? ' (' + count + ')' : '');
-        link.setAttribute('aria-label', label + ' for ' + personData.name);
+        link.setAttribute('aria-label', __('%s for %s', label, personData.name));
         link.innerHTML = svgIcon;
         if (count > 0) {
             var badge = document.createElement('span');
@@ -1002,9 +1014,9 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     var mediaIcon = '<svg viewBox="0 0 16 16" width="12" height="12"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5.5" cy="6.5" r="1.5" fill="currentColor"/><path d="M1.5 11l3-3 2 2 3-4 4 5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
 
     var personUrl = personData.url || '';
-    var addSourceLink = quickAction(personUrl ? personUrl + '#sources_tab' : '', 'Sources', srcIcon, sourceCount);
-    var addNoteLink = quickAction(personUrl ? personUrl + '#notes' : '', 'Notes', noteIcon, noteCount);
-    var addMediaLink = quickAction(personUrl ? personUrl + '#media' : '', 'Media', mediaIcon, mediaCount);
+    var addSourceLink = quickAction(personUrl ? personUrl + '#sources_tab' : '', __('Sources'), srcIcon, sourceCount);
+    var addNoteLink = quickAction(personUrl ? personUrl + '#notes' : '', __('Notes'), noteIcon, noteCount);
+    var addMediaLink = quickAction(personUrl ? personUrl + '#media' : '', __('Media'), mediaIcon, mediaCount);
     if (addSourceLink) actionsLeft.appendChild(addSourceLink);
     if (addNoteLink) actionsLeft.appendChild(addNoteLink);
     if (addMediaLink) actionsLeft.appendChild(addMediaLink);
@@ -1021,8 +1033,8 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         addNoteBtn.target = '_blank';
         addNoteBtn.rel = 'noopener';
         addNoteBtn.className = 'sp-card-action-btn';
-        addNoteBtn.title = 'Add note';
-        addNoteBtn.setAttribute('aria-label', 'Add note for ' + personData.name);
+        addNoteBtn.title = __('Add note');
+        addNoteBtn.setAttribute('aria-label', __('%s for %s', __('Add note'), personData.name));
         addNoteBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="5" x2="8" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
         actionsRight.appendChild(addNoteBtn);
     }
@@ -1034,8 +1046,8 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         editFamilyLink.target = '_blank';
         editFamilyLink.rel = 'noopener';
         editFamilyLink.className = 'sp-card-action-btn';
-        editFamilyLink.title = 'Edit family';
-        editFamilyLink.setAttribute('aria-label', 'Edit family for ' + personData.name);
+        editFamilyLink.title = __('Edit family');
+        editFamilyLink.setAttribute('aria-label', __('%s for %s', __('Edit family'), personData.name));
         editFamilyLink.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><circle cx="5" cy="4" r="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1 13c0-2.5 2-4 4-4s4 1.5 4 4" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="4.5" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M9.5 13c0-2 1.3-3.2 2.8-3.2 .8 0 1.5.3 2 .8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
         actionsRight.appendChild(editFamilyLink);
     }
@@ -1047,8 +1059,8 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         viewLink.target = '_blank';
         viewLink.rel = 'noopener';
         viewLink.className = 'sp-card-action-btn';
-        viewLink.title = 'Edit person';
-        viewLink.setAttribute('aria-label', 'Edit ' + personData.name);
+        viewLink.title = __('Edit person');
+        viewLink.setAttribute('aria-label', __('Edit %s', personData.name));
         viewLink.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><line x1="9.5" y1="3.5" x2="12.5" y2="6.5" stroke="currentColor" stroke-width="1.3"/></svg>';
         actionsRight.appendChild(viewLink);
     }
@@ -1058,8 +1070,8 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         var rebaseBtn = document.createElement('button');
         rebaseBtn.type = 'button';
         rebaseBtn.className = 'sp-card-action-btn';
-        rebaseBtn.title = 'Center tree on this person';
-        rebaseBtn.setAttribute('aria-label', 'Center tree on ' + personData.name);
+        rebaseBtn.title = __('Center tree on this person');
+        rebaseBtn.setAttribute('aria-label', __('Center tree on %s', personData.name));
         rebaseBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/><line x1="8" y1="0" x2="8" y2="4" stroke="currentColor" stroke-width="1.3"/><line x1="8" y1="12" x2="8" y2="16" stroke="currentColor" stroke-width="1.3"/><line x1="0" y1="8" x2="4" y2="8" stroke="currentColor" stroke-width="1.3"/><line x1="12" y1="8" x2="16" y2="8" stroke="currentColor" stroke-width="1.3"/></svg>';
         (function(xref) {
             rebaseBtn.addEventListener('click', function (e) {
@@ -1097,7 +1109,7 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
     // Make the couple-line area clickable → open family page in new tab
     if (familyData.familyUrl) {
         lineEl.style.cursor = 'pointer';
-        lineEl.title = 'Open family page';
+        lineEl.title = __('Open family page');
         lineEl.addEventListener('click', function (e) {
             e.stopPropagation();
             window.open(familyData.familyUrl, '_blank');
@@ -1123,20 +1135,20 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
     var isMarried = familyData.married;
 
     var tipParts = [];
-    if (isDivorced) tipParts.push('Divorced');
-    else if (isMarried) tipParts.push('Married');
-    else tipParts.push('Partnership');
-    if (familyData.marriageDate) tipParts.push('Marriage: ' + familyData.marriageDate);
-    if (familyData.divorceDate) tipParts.push('Divorce: ' + familyData.divorceDate);
-    if (Number.isFinite(familyData.husbandAgeAtMarriage)) tipParts.push('♂ age at marriage: ' + familyData.husbandAgeAtMarriage);
-    if (Number.isFinite(familyData.wifeAgeAtMarriage)) tipParts.push('♀ age at marriage: ' + familyData.wifeAgeAtMarriage);
-    if (familyData.marriagePlace) tipParts.push('Marriage place: ' + familyData.marriagePlace);
-    if (familyData.divorcePlace) tipParts.push('Divorce place: ' + familyData.divorcePlace);
-    if (familyData.durationLabel) tipParts.push('Duration: ' + familyData.durationLabel);
+    if (isDivorced) tipParts.push(__('Divorced'));
+    else if (isMarried) tipParts.push(__('Married'));
+    else tipParts.push(__('Partnership'));
+    if (familyData.marriageDate) tipParts.push(__('Marriage:') + ' ' + familyData.marriageDate);
+    if (familyData.divorceDate) tipParts.push(__('Divorce:') + ' ' + familyData.divorceDate);
+    if (Number.isFinite(familyData.husbandAgeAtMarriage)) tipParts.push(__('♂ age at marriage:') + ' ' + familyData.husbandAgeAtMarriage);
+    if (Number.isFinite(familyData.wifeAgeAtMarriage)) tipParts.push(__('♀ age at marriage:') + ' ' + familyData.wifeAgeAtMarriage);
+    if (familyData.marriagePlace) tipParts.push(__('Marriage place:') + ' ' + familyData.marriagePlace);
+    if (familyData.divorcePlace) tipParts.push(__('Divorce place:') + ' ' + familyData.divorcePlace);
+    if (familyData.durationLabel) tipParts.push(__('Duration:') + ' ' + familyData.durationLabel);
     if (Number.isFinite(familyData.familySourceCount) || Number.isFinite(familyData.familyNoteCount)) {
-        tipParts.push('Family sources: ' + (familyData.familySourceCount || 0));
-        tipParts.push('Family notes: ' + (familyData.familyNoteCount || 0));
-        tipParts.push('Family media: ' + (familyData.familyMediaCount || 0));
+        tipParts.push(__('Family sources:') + ' ' + (familyData.familySourceCount || 0));
+        tipParts.push(__('Family notes:') + ' ' + (familyData.familyNoteCount || 0));
+        tipParts.push(__('Family media:') + ' ' + (familyData.familyMediaCount || 0));
     }
     lineEl.title = tipParts.join(' | ');
 
@@ -1179,9 +1191,9 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
                 return wrap;
             }
 
-            iconsRow.appendChild(famIcon(srcIcon, famSourceCount, 'Sources'));
-            iconsRow.appendChild(famIcon(noteIconSvg, famNoteCount, 'Notes'));
-            iconsRow.appendChild(famIcon(mediaIconSvg, famMediaCount, 'Media'));
+            iconsRow.appendChild(famIcon(srcIcon, famSourceCount, __('Sources')));
+            iconsRow.appendChild(famIcon(noteIconSvg, famNoteCount, __('Notes')));
+            iconsRow.appendChild(famIcon(mediaIconSvg, famMediaCount, __('Media')));
             chipEl.appendChild(iconsRow);
         }
     }
@@ -1296,7 +1308,7 @@ FamilyNavigator.prototype.createAncestorTreeIcon = function (nodeId, lineIndex) 
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'sp-ancestor-tree-btn';
-    btn.title = lineIndex === 0 ? "Show father's ancestors" : "Show mother's / spouse's ancestors";
+    btn.title = lineIndex === 0 ? __("Show father's ancestors") : __("Show mother's / spouse's ancestors");
     btn.innerHTML = '<svg viewBox="0 0 20 20" width="18" height="18">'
         + '<line x1="10" y1="20" x2="10" y2="7" stroke="currentColor" stroke-width="2"/>'
         + '<line x1="10" y1="9" x2="4" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'
@@ -1352,7 +1364,7 @@ FamilyNavigator.prototype._renderIconOverlay = function (canvasW, canvasH) {
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'sp-ancestor-expand';
-            btn.title = 'Expand ancestors';
+            btn.title = __('Expand ancestors');
             btn.innerHTML = '<svg viewBox="0 0 60 22" width="67" height="17" aria-hidden="true">'
                 + '<line x1="30" y1="18" x2="16" y2="12" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
                 + '<line x1="30" y1="18" x2="44" y2="12" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
@@ -1395,7 +1407,7 @@ FamilyNavigator.prototype.createNavigateIcon = function (xref) {
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'sp-ancestor-tree-btn sp-ancestor-expand';
-    btn.title = 'Navigate to ancestors';
+    btn.title = __('Navigate to ancestors');
     var cc = wtpCSSColors;
     btn.innerHTML = '<svg viewBox="0 0 60 22" width="67" height="17" aria-hidden="true">'
         + '<line x1="30" y1="18" x2="16" y2="12" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
@@ -1432,7 +1444,7 @@ FamilyNavigator.prototype.createLazyElement = function (node, layout) {
     el.style.height = this.LAZY_H + 'px';
     el.dataset.nodeId = node.id;
     el.dataset.familyXref = node.familyXref;
-    el.textContent = '+ expand';
+    el.textContent = __('+ expand');
 
     var nav = this;
     el.addEventListener('click', function () {
@@ -2672,7 +2684,7 @@ FamilyNavigator.prototype.renderSearchResults = function (results) {
         if (this.searchInput && this.searchInput.value.trim().length >= 2) {
             var noResult = document.createElement('div');
             noResult.className = 'sp-search-item sp-no-result';
-            noResult.textContent = 'No results found';
+            noResult.textContent = __('No results found');
             this.searchResults.appendChild(noResult);
             this.searchResults.classList.add('sp-show');
         }
@@ -2857,7 +2869,7 @@ FamilyNavigator.prototype._updateFocusPersonBox = function () {
     var rootNode = this.nodeMap && this.treeData ? this.nodeMap[this.treeData.rootId] : null;
     if (!rootNode || !rootNode.person) {
         this.focusAvatar.innerHTML = '';
-        this.focusName.textContent = 'Search person\u2026';
+        this.focusName.textContent = __('Search person\u2026');
         if (this.focusChip) this.focusChip.classList.add('sp-focus-chip-empty');
         this._updateToolbarState(false);
         return;

@@ -4,6 +4,7 @@ use Fisharebest\Webtrees\I18N;
 
 /**
  * @var string $module
+ * @var string $moduleVersion
  * @var string $prefix
  * @var string $rootXref
  * @var object $tree
@@ -12,6 +13,51 @@ use Fisharebest\Webtrees\I18N;
  */
 
 ?>
+
+<script>
+window.wtpTranslations = <?= json_encode([
+    'Add photo'                        => I18N::translate('Add photo'),
+    'View %s profile'                  => I18N::translate('View %s profile', '%s'),
+    'Birth place:'                     => I18N::translate('Birth place:'),
+    'Death place:'                     => I18N::translate('Death place:'),
+    "Father's age at birth:"           => I18N::translate("Father's age at birth:"),
+    "Mother's age at birth:"           => I18N::translate("Mother's age at birth:"),
+    'Sources'                          => I18N::translate('Sources'),
+    'Notes'                            => I18N::translate('Notes'),
+    'Media'                            => I18N::translate('Media'),
+    '%s for %s'                        => I18N::translate('%s for %s', '%s', '%s'),
+    'Add note'                         => I18N::translate('Add note'),
+    'Edit family'                      => I18N::translate('Edit family'),
+    'Edit person'                      => I18N::translate('Edit person'),
+    'Edit %s'                          => I18N::translate('Edit %s', '%s'),
+    'Center tree on this person'       => I18N::translate('Center tree on this person'),
+    'Center tree on %s'                => I18N::translate('Center tree on %s', '%s'),
+    'Open family page'                 => I18N::translate('Open family page'),
+    'Divorced'                         => I18N::translate('Divorced'),
+    'Married'                          => I18N::translate('Married'),
+    'Partnership'                      => I18N::translate('Partnership'),
+    'Marriage:'                        => I18N::translate('Marriage:'),
+    'Divorce:'                         => I18N::translate('Divorce:'),
+    '♂ age at marriage:'               => I18N::translate('♂ age at marriage:'),
+    '♀ age at marriage:'               => I18N::translate('♀ age at marriage:'),
+    'Marriage place:'                  => I18N::translate('Marriage place:'),
+    'Divorce place:'                   => I18N::translate('Divorce place:'),
+    'Duration:'                        => I18N::translate('Duration:'),
+    'Family sources:'                  => I18N::translate('Family sources:'),
+    'Family notes:'                    => I18N::translate('Family notes:'),
+    'Family media:'                    => I18N::translate('Family media:'),
+    "Show father's ancestors"          => I18N::translate("Show father's ancestors"),
+    "Show mother's / spouse's ancestors" => I18N::translate("Show mother's / spouse's ancestors"),
+    'Expand ancestors'                 => I18N::translate('Expand ancestors'),
+    'Navigate to ancestors'            => I18N::translate('Navigate to ancestors'),
+    '+ expand'                         => I18N::translate('+ expand'),
+    'No results found'                 => I18N::translate('No results found'),
+    'Search person…'                   => I18N::translate('Search person...'),
+    'Sources:'                         => I18N::translate('Sources:'),
+    'Notes:'                           => I18N::translate('Notes:'),
+    'Media:'                           => I18N::translate('Media:'),
+], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
+</script>
 
 <div class="wt-chart wt-chart-interactive wtp-plugin-root">
     <div id="<?= $prefix ?>_wrap" class="sp-navigator" data-url-expand="<?= e($expandUrl) ?>" data-url-search="<?= e($searchUrl) ?>" style="height: 500px">
@@ -70,5 +116,12 @@ use Fisharebest\Webtrees\I18N;
 
         <canvas id="<?= $prefix ?>_connCanvas" class="sp-conn-canvas"></canvas>
         <div id="<?= $prefix ?>_canvas" class="sp-navigator-canvas"></div>
+        <div class="sp-watermark">
+            <a href="https://szymon.porwolik.com" target="_blank" rel="noopener" class="sp-watermark-link">Tree Explorer for webtrees by SP</a>
+            <a href="https://github.com/szporwolik/webtrees-tree-explorer" target="_blank" rel="noopener" class="sp-watermark-gh" title="GitHub">
+                <svg class="sp-watermark-gh-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+                <span class="sp-watermark-ver">v<?= e($moduleVersion) ?></span>
+            </a>
+        </div>
     </div>
 </div>

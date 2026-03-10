@@ -1,0 +1,237 @@
+# SP Tree Explorer for webtrees - Russian Translation
+# Copyright (C) 2025-2026 Szymon Porwolik
+# This file is distributed under the same license as the SP Tree Explorer package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: SP Tree Explorer 0.1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/szporwolik/webtrees-tree-explorer/issues\n"
+"POT-Creation-Date: 2025-06-01 00:00+0000\n"
+"PO-Revision-Date: 2025-06-01 00:00+0000\n"
+"Last-Translator: Szymon Porwolik\n"
+"Language-Team: Russian\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: SpTreeExplorer.php DiagramChartFeature.php
+msgid "Tree Explorer"
+msgstr "Обозреватель дерева"
+
+#: SpTreeExplorer.php
+msgid "An interactive tree explorer showing ancestors and descendants."
+msgstr "Интерактивный обозреватель дерева, показывающий предков и потомков."
+
+#: Module/TreeNavigator/FamilyTreeRenderer.php
+msgid "Show parents"
+msgstr "Показать родителей"
+
+#: Exceptions/NavigatorActionMissing.php
+msgid "Unknown action:"
+msgstr "Неизвестное действие:"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Change person"
+msgstr "Сменить персону"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Search person..."
+msgstr "Поиск персоны…"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Cancel"
+msgstr "Отмена"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Zoom out"
+msgstr "Уменьшить"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Reset zoom & center"
+msgstr "Сбросить масштаб и центрировать"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Zoom in"
+msgstr "Увеличить"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Toggle fullscreen"
+msgstr "Полноэкранный режим"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Copy share link"
+msgstr "Копировать ссылку"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Show source counts"
+msgstr "Показать количество источников"
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Sources"
+msgstr "Источники"
+
+#. JS dynamic content
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Add photo"
+msgstr "Добавить фото"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "View %s profile"
+msgstr "Просмотр профиля %s"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Birth place:"
+msgstr "Место рождения:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Death place:"
+msgstr "Место смерти:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Father's age at birth:"
+msgstr "Возраст отца при рождении:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Mother's age at birth:"
+msgstr "Возраст матери при рождении:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Notes"
+msgstr "Заметки"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Media"
+msgstr "Медиа"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "%s for %s"
+msgstr "%s для %s"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Add note"
+msgstr "Добавить заметку"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Edit family"
+msgstr "Редактировать семью"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Edit person"
+msgstr "Редактировать персону"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Edit %s"
+msgstr "Редактировать %s"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Center tree on this person"
+msgstr "Центрировать дерево на этой персоне"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Center tree on %s"
+msgstr "Центрировать дерево на %s"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Open family page"
+msgstr "Открыть страницу семьи"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Divorced"
+msgstr "В разводе"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Married"
+msgstr "В браке"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Partnership"
+msgstr "Партнёрство"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Marriage:"
+msgstr "Брак:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Divorce:"
+msgstr "Развод:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "♂ age at marriage:"
+msgstr "♂ возраст при браке:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "♀ age at marriage:"
+msgstr "♀ возраст при браке:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Marriage place:"
+msgstr "Место бракосочетания:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Divorce place:"
+msgstr "Место развода:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Duration:"
+msgstr "Продолжительность:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Family sources:"
+msgstr "Источники семьи:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Family notes:"
+msgstr "Заметки семьи:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Family media:"
+msgstr "Медиа семьи:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Show father's ancestors"
+msgstr "Показать предков отца"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Show mother's / spouse's ancestors"
+msgstr "Показать предков матери / супруга"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Expand ancestors"
+msgstr "Развернуть предков"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Navigate to ancestors"
+msgstr "Перейти к предкам"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "+ expand"
+msgstr "+ развернуть"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "No results found"
+msgstr "Ничего не найдено"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Sources:"
+msgstr "Источники:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Notes:"
+msgstr "Заметки:"
+
+#: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
+msgid "Media:"
+msgstr "Медиа:"
+
+#: Module/TreeNavigator/FamilyTreeRenderer.php
+msgid "%sy %sm"
+msgstr "%sл %sм"
+
+#: Module/TreeNavigator/FamilyTreeRenderer.php
+msgid "%sy"
+msgstr "%sл"
+
+#: Module/TreeNavigator/FamilyTreeRenderer.php
+msgid "%sm"
+msgstr "%sм"

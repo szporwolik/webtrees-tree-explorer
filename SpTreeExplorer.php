@@ -13,7 +13,7 @@ namespace SpTreeExplorer\FamilyNav;
 use Aura\Router\RouterContainer;
 use Aura\Router\Map;
 use Fig\Http\Message\RequestMethodInterface;
-use fisharebest\Localization\Translation;
+use Fisharebest\Localization\Translation;
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\I18N;
 use Fisharebest\Webtrees\Individual;
@@ -55,7 +55,7 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
 
     public function customModuleVersion(): string
     {
-        return '0.1.0';
+        return '0.2.0';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -75,8 +75,7 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
 
     public function customTranslations(string $language): array
     {
-        $lang = substr($language, 0, 2);
-        $file = $this->resourcesFolder() . 'lang' . DIRECTORY_SEPARATOR . $lang . '.po';
+        $file = $this->resourcesFolder() . 'lang' . DIRECTORY_SEPARATOR . $language . '.mo';
         if (file_exists($file)) {
             return (new Translation($file))->asArray();
         }
@@ -180,12 +179,13 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
                 ]);
 
                 $cardHtml = view('modules/spNavigator/viewport', [
-                    'module'      => $moduleName,
-                    'prefix'      => $prefix,
-                    'rootXref'    => '',
-                    'tree'        => $tree,
-                    'expandUrl'   => $expandUrl,
-                    'searchUrl'   => $searchUrl,
+                    'module'        => $moduleName,
+                    'moduleVersion' => $this->customModuleVersion(),
+                    'prefix'        => $prefix,
+                    'rootXref'      => '',
+                    'tree'          => $tree,
+                    'expandUrl'     => $expandUrl,
+                    'searchUrl'     => $searchUrl,
                 ]);
 
                 $jsExpandUrl = addcslashes($expandUrl, "'\\");
@@ -214,7 +214,7 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
         $moduleName = Validator::attributes($request)->string('module');
 
         $prefix = 'spN01';
-        $renderer = new FamilyTreeRenderer($prefix, $moduleName, $tree, $individual->xref());
+        $renderer = new FamilyTreeRenderer($prefix, $moduleName, $tree, $individual->xref(), $this->customModuleVersion());
         $renderer->prepare();
 
         [$cardHtml, $initScript] = $renderer->buildViewport($individual, $depth, true);

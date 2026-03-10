@@ -36,6 +36,7 @@ class FamilyTreeRenderer
 {
     private string $prefix;
     private string $moduleName;
+    private string $moduleVersion;
     private Tree $tree;
     private string $rootXref;
     private int $nodeSeq;
@@ -53,10 +54,11 @@ class FamilyTreeRenderer
     /** @var int Unique node id counter */
     private int $nodeIdCounter = 0;
 
-    public function __construct(string $prefix, string $moduleName, Tree $tree, string $rootXref)
+    public function __construct(string $prefix, string $moduleName, Tree $tree, string $rootXref, string $moduleVersion = '')
     {
         $this->prefix     = $prefix;
         $this->moduleName = $moduleName;
+        $this->moduleVersion = $moduleVersion;
         $this->tree       = $tree;
         $this->rootXref   = $rootXref;
         $this->nodeSeq    = 0;
@@ -153,12 +155,13 @@ class FamilyTreeRenderer
         ]);
 
         $html = view('modules/spNavigator/viewport', [
-            'module'      => $this->moduleName,
-            'prefix'      => $cardName,
-            'rootXref'    => $this->rootXref,
-            'tree'        => $this->tree,
-            'expandUrl'   => $expandUrl,
-            'searchUrl'   => $searchUrl,
+            'module'        => $this->moduleName,
+            'moduleVersion' => $this->moduleVersion,
+            'prefix'        => $cardName,
+            'rootXref'      => $this->rootXref,
+            'tree'          => $this->tree,
+            'expandUrl'     => $expandUrl,
+            'searchUrl'     => $searchUrl,
         ]);
 
         $isExpanded = $expanded ? 'true' : 'false';
@@ -1061,13 +1064,13 @@ class FamilyTreeRenderer
         $months = (int) floor(($days - ($years * 365.2425)) / 30.436875);
 
         if ($years > 0 && $months > 0) {
-            return $years . 'y ' . $months . 'm';
+            return I18N::translate('%sy %sm', (string) $years, (string) $months);
         }
         if ($years > 0) {
-            return $years . 'y';
+            return I18N::translate('%sy', (string) $years);
         }
 
-        return max(1, $months) . 'm';
+        return I18N::translate('%sm', (string) max(1, $months));
     }
 
     // --- AJAX response builders ---
