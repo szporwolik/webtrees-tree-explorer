@@ -406,6 +406,7 @@ class FamilyTreeRenderer
             $divorceJd = 0;
             $familyUrl = $spouseFamily->url();
             $spouseHasParents = false;
+            $spouseParentFamilyXref = '';
             $nextMarriageJd = 0;
             $hasNextRelationship = isset($allSpouseFamilies[$famIdx + 1]);
 
@@ -476,6 +477,9 @@ class FamilyTreeRenderer
                             }
                         }
                     }
+                    if ($spouseHasParents) {
+                        $spouseParentFamilyXref = $spParentFam->xref();
+                    }
                 }
             }
 
@@ -528,6 +532,7 @@ class FamilyTreeRenderer
                 'familyUrl'    => $familyUrl,
                 'familyXref'   => $spouseFamily->xref(),
                 'spouseHasParents' => $spouseHasParents,
+                'spouseParentFamilyXref' => $spouseParentFamilyXref,
                 'husbandAgeAtMarriage' => $husbandAgeAtMarriage,
                 'wifeAgeAtMarriage' => $wifeAgeAtMarriage,
             ];
@@ -690,6 +695,7 @@ class FamilyTreeRenderer
                             'familyUrl'    => '',
                             'familyXref'   => $parentFamily->xref(),
                             'spouseHasParents' => false,
+                            'spouseParentFamilyXref' => '',
                         ]],
                         'isOrigin'  => false,
                         'direction' => 1,
@@ -778,6 +784,7 @@ class FamilyTreeRenderer
                             'familyUrl'    => '',
                             'familyXref'   => $spParentFam->xref(),
                             'spouseHasParents' => false,
+                            'spouseParentFamilyXref' => '',
                         ]],
                         'isOrigin'  => false,
                         'direction' => 1,

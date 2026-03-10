@@ -797,13 +797,31 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
     // Store ancestor-icon metadata on the wrapper for overlay rendering
     wrapper._ancestorIcons = [];
     if (personHasParents && !personAncestorsVisible) {
-        wrapper._ancestorIcons.push({ xref: node.person.xref, target: 'person' });
+        // Find parent family xref from ancestorLines (type='self')
+        var selfLine = null;
+        var aLines = node.ancestorLines || [];
+        for (var li = 0; li < aLines.length; li++) {
+            if (aLines[li].type === 'self') { selfLine = aLines[li]; break; }
+        }
+        wrapper._ancestorIcons.push({
+            xref: node.person.xref, target: 'person',
+            nodeId: node.id,
+            familyXref: selfLine ? selfLine.familyXref : '',
+            childXref: node.person.xref,
+            lineIndex: 0
+        });
     }
     for (var si = 0; si < spouseCards.length; si++) {
         var sc = spouseCards[si];
         if (sc.family.spouse && sc.family.spouseHasParents) {
             if (si === 0 && spouseAncestorsVisible) continue;
-            wrapper._ancestorIcons.push({ xref: sc.family.spouse.xref, target: 'spouse', index: si });
+            wrapper._ancestorIcons.push({
+                xref: sc.family.spouse.xref, target: 'spouse', index: si,
+                nodeId: node.id,
+                familyXref: sc.family.spouseParentFamilyXref || '',
+                childXref: sc.family.spouse.xref,
+                lineIndex: 1
+            });
         }
     }
 
@@ -1334,7 +1352,7 @@ FamilyNavigator.prototype._renderIconOverlay = function (canvasW, canvasH) {
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'sp-ancestor-expand';
-            btn.title = 'Navigate to ancestors';
+            btn.title = 'Expand ancestors';
             btn.innerHTML = '<svg viewBox="0 0 60 22" width="67" height="17" aria-hidden="true">'
                 + '<line x1="30" y1="18" x2="16" y2="12" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
                 + '<line x1="30" y1="18" x2="44" y2="12" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
@@ -1353,12 +1371,16 @@ FamilyNavigator.prototype._renderIconOverlay = function (canvasW, canvasH) {
             btn.style.position = 'absolute';
             btn.style.left = iconX + 'px';
             btn.style.top = iconY + 'px';
-            (function(xref) {
+            (function(iconInfo, nodeId) {
                 btn.addEventListener('click', function (e) {
                     e.stopPropagation();
-                    nav.navigateTo(xref);
+                    if (iconInfo.familyXref) {
+                        nav.expandAncestorInPlace(nodeId, iconInfo.familyXref, iconInfo.childXref, iconInfo.lineIndex);
+                    } else {
+                        nav.navigateTo(iconInfo.xref);
+                    }
                 });
-            })(info.xref);
+            })(info, id);
             this.iconCanvas.appendChild(btn);
         }
     }
@@ -2012,6 +2034,108 @@ FamilyNavigator.prototype.expandAncestors = function (nodeId, ancestorLine) {
     var xref = ancestorLine.spouseXref || ancestorLine.personXref || '';
     if (!xref) return;
     this.navigateTo(xref);
+};
+
+/**
+ * Expand ancestor branch in-place — fetch and merge ancestor data
+ * without rebasing the whole tree.
+ */
+FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyXref, childXref, lineIndex) {
+    var nav = this;
+
+    // If ancestors for this line are already loaded (but hidden), just switch to them
+    var existingEdges = this.parentEdges[childNodeId] || [];
+    for (var i = 0; i < existingEdges.length; i++) {
+        if (existingEdges[i].lineIndex === lineIndex) {
+            this.activeLines[childNodeId] = lineIndex;
+            this.measureAndRender();
+            this.focusNode(childNodeId);
+            return;
+        }
+    }
+
+    var url = this.expandUrl
+        + '&instance=' + encodeURIComponent(this.cardPrefix)
+        + '&fid=' + encodeURIComponent(familyXref)
+        + '&pid=' + encodeURIComponent(childXref);
+
+    this.showLoader(true);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4) {
+            nav.showLoader(false);
+            if (xhr.status === 200 && xhr.responseText) {
+                try {
+                    var newData = JSON.parse(xhr.responseText);
+                    if (newData.nodes && newData.nodes.length > 0) {
+                        nav._mergeAncestorData(childNodeId, newData, lineIndex);
+                    }
+                } catch (e) {
+                    console.error('SP Tree Navigator: ancestor expand parse error', e);
+                }
+            }
+        }
+    };
+    xhr.send();
+};
+
+/**
+ * Merge fetched ancestor data into the existing tree, connecting
+ * the new subtree root to the given child node.
+ */
+FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, lineIndex) {
+    // Add new nodes
+    for (var i = 0; i < newData.nodes.length; i++) {
+        var n = newData.nodes[i];
+        this.nodeMap[n.id] = n;
+    }
+
+    // Add new edges
+    for (var i = 0; i < newData.edges.length; i++) {
+        var edge = newData.edges[i];
+        var key = edge.from + '->' + edge.to;
+        this.edgeMap[key] = edge;
+
+        if (!this.childrenMap[edge.from]) {
+            this.childrenMap[edge.from] = [];
+        }
+        this.childrenMap[edge.from].push(edge.to);
+
+        if (!this.parentEdges[edge.to]) {
+            this.parentEdges[edge.to] = [];
+        }
+        this.parentEdges[edge.to].push(edge);
+    }
+
+    // Connect the new subtree root to the existing child node
+    if (newData.rootId) {
+        var connectEdge = {
+            from: newData.rootId,
+            to: childNodeId,
+            type: 'parent-child',
+            line: lineIndex === 0 ? 'self' : 'spouse',
+            lineIndex: lineIndex
+        };
+        var connectKey = newData.rootId + '->' + childNodeId;
+        this.edgeMap[connectKey] = connectEdge;
+
+        if (!this.childrenMap[newData.rootId]) this.childrenMap[newData.rootId] = [];
+        this.childrenMap[newData.rootId].push(childNodeId);
+
+        if (!this.parentEdges[childNodeId]) this.parentEdges[childNodeId] = [];
+        this.parentEdges[childNodeId].push(connectEdge);
+    }
+
+    // Switch to the newly expanded ancestor line so it becomes visible
+    if (lineIndex > 0) {
+        this.activeLines[childNodeId] = lineIndex;
+    }
+
+    // Re-measure and re-render, then scroll to the expanded area
+    this.measureAndRender();
+    this.focusNode(childNodeId);
 };
 
 /**
