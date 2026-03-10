@@ -200,15 +200,18 @@ class FamilyTreeRenderer
         $birthText = $birthDate->isOK() ? strip_tags($birthDate->display($this->tree, null, true)) : '';
         $deathText = $deathDate->isOK() ? strip_tags($deathDate->display($this->tree, null, true)) : '';
 
-        // Keep compact lifespan for known birth+death, and show explicit labels for partial data.
+        // Build a readable lifespan line for the card.
+        $dash = "\u{2013}"; // en-dash
         if ($birthText !== '' && $deathText !== '') {
-            $dateLine = strip_tags($person->lifespan());
+            $dateLine = $birthText . ' ' . $dash . ' ' . $deathText;
+        } elseif ($birthText !== '' && $person->isDead()) {
+            $dateLine = $birthText . ' ' . $dash . ' ?';
         } elseif ($birthText !== '') {
             $dateLine = $birthText;
         } elseif ($deathText !== '') {
-            $dateLine = '? - ' . $deathText;
+            $dateLine = '? ' . $dash . ' ' . $deathText;
         } else {
-            $dateLine = strip_tags($person->lifespan());
+            $dateLine = '';
         }
 
         $fatherAgeAtBirth = null;
@@ -254,7 +257,7 @@ class FamilyTreeRenderer
             'xref'     => $person->xref(),
             'name'     => strip_tags($person->fullName()),
             'nameHtml' => $person->fullName(),
-            'years'    => $person->lifespan(),
+            'years'    => strip_tags($person->lifespan()),
             'dateLine' => $dateLine,
             'dateLineQuality' => $this->mergeDateQuality($birthMeta['quality'], $deathMeta['quality']),
             'birthPlace' => $birthMeta['place'],
@@ -479,6 +482,7 @@ class FamilyTreeRenderer
             $familyGedcom = $spouseFamily->gedcom();
             $familySourceCount = $this->countLevelOneTag($familyGedcom, 'SOUR');
             $familyNoteCount = $this->countLevelOneTag($familyGedcom, 'NOTE');
+            $familyMediaCount = $this->countLevelOneTag($familyGedcom, 'OBJE');
 
             // Death date JDs for duration fallback
             $personDeathJd = $person->getDeathDate()->isOK() ? $person->getDeathDate()->julianDay() : 0;
@@ -499,6 +503,7 @@ class FamilyTreeRenderer
                 'hasNextRelationship' => $hasNextRelationship,
                 'familySourceCount' => $familySourceCount,
                 'familyNoteCount' => $familyNoteCount,
+                'familyMediaCount' => $familyMediaCount,
                 'familyUrl'    => $familyUrl,
                 'familyXref'   => $spouseFamily->xref(),
                 'spouseHasParents' => $spouseHasParents,

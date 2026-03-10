@@ -843,13 +843,14 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     var person = document.createElement('div');
     person.className = 'sp-person';
 
-    // Avatar — clickable link to add-media page
+    // Avatar — link to profile (has photo) or media tab (no photo)
     var avatarWrap = document.createElement('a');
     avatarWrap.className = 'sp-avatar-wrap';
-    avatarWrap.href = personData.addMediaUrl;
     avatarWrap.target = '_blank';
-    avatarWrap.title = 'Add photo';
+    avatarWrap.rel = 'noopener';
     if (personData.thumb) {
+        avatarWrap.href = personData.url;
+        avatarWrap.title = personData.name;
         var img = document.createElement('img');
         img.className = 'sp-avatar';
         img.src = personData.thumb;
@@ -857,7 +858,8 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         img.loading = 'lazy';
         avatarWrap.appendChild(img);
     } else {
-        // Neutral camera placeholder for quick "click to upload" affordance
+        avatarWrap.href = personData.url + '#media';
+        avatarWrap.title = 'Add photo';
         avatarWrap.classList.add('sp-avatar-placeholder');
     }
     person.appendChild(avatarWrap);
@@ -880,7 +882,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
 
     var years = document.createElement('span');
     years.className = 'sp-years';
-    years.textContent = personData.dateLine || personData.years || '';
+    years.textContent = personData.dateLine || '';
     if (personData.dateLineQuality) {
         years.classList.add('sp-years-' + personData.dateLineQuality);
     }
@@ -1114,40 +1116,77 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
     if (Number.isFinite(familyData.familySourceCount) || Number.isFinite(familyData.familyNoteCount)) {
         tipParts.push('Family sources: ' + (familyData.familySourceCount || 0));
         tipParts.push('Family notes: ' + (familyData.familyNoteCount || 0));
+        tipParts.push('Family media: ' + (familyData.familyMediaCount || 0));
     }
     lineEl.title = tipParts.join(' | ');
 
-    function appendFamilyMetrics() {
+    var famSourceCount = Number.isFinite(familyData.familySourceCount) ? familyData.familySourceCount : 0;
+    var famNoteCount = Number.isFinite(familyData.familyNoteCount) ? familyData.familyNoteCount : 0;
+    var famMediaCount = Number.isFinite(familyData.familyMediaCount) ? familyData.familyMediaCount : 0;
+
+    function appendChipExtras(chipEl) {
         if (compactMode) return;
-        if (!Number.isFinite(familyData.familySourceCount) && !Number.isFinite(familyData.familyNoteCount)) return;
-        var metrics = document.createElement('span');
-        metrics.className = 'sp-couple-metrics';
-        metrics.textContent = 'S:' + (familyData.familySourceCount || 0) + ' N:' + (familyData.familyNoteCount || 0);
-        if (!nav.showSources) metrics.style.display = 'none';
-        lineEl.appendChild(metrics);
+        var hasExtras = familyData.durationLabel || famSourceCount > 0 || famNoteCount > 0 || famMediaCount > 0;
+        if (!hasExtras) return;
+
+        if (familyData.durationLabel) {
+            var dur = document.createElement('span');
+            dur.className = 'sp-couple-chip-duration';
+            dur.textContent = familyData.durationLabel;
+            chipEl.appendChild(dur);
+        }
+
+        if (famSourceCount > 0 || famNoteCount > 0 || famMediaCount > 0) {
+            var iconsRow = document.createElement('span');
+            iconsRow.className = 'sp-couple-chip-icons';
+            if (!nav.showSources) iconsRow.style.display = 'none';
+
+            var srcIcon = '<svg viewBox="0 0 16 16" width="10" height="10"><path d="M2 1h8l4 4v9a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M9 1v4h4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
+            var noteIconSvg = '<svg viewBox="0 0 16 16" width="10" height="10"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="4" y1="5" x2="12" y2="5" stroke="currentColor" stroke-width="1.2"/><line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.2"/><line x1="4" y1="11" x2="9" y2="11" stroke="currentColor" stroke-width="1.2"/></svg>';
+            var mediaIconSvg = '<svg viewBox="0 0 16 16" width="10" height="10"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5.5" cy="6.5" r="1.5" fill="currentColor"/><path d="M1.5 11l3-3 2 2 3-4 4 5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+
+            function famIcon(svgHtml, count, label) {
+                var wrap = document.createElement('span');
+                wrap.className = 'sp-couple-chip-icon';
+                if (count > 0) wrap.classList.add('sp-has-data');
+                wrap.title = label + ': ' + count;
+                wrap.innerHTML = svgHtml;
+                if (count > 0) {
+                    var badge = document.createElement('span');
+                    badge.className = 'sp-action-count';
+                    badge.textContent = count;
+                    wrap.appendChild(badge);
+                }
+                return wrap;
+            }
+
+            iconsRow.appendChild(famIcon(srcIcon, famSourceCount, 'Sources'));
+            iconsRow.appendChild(famIcon(noteIconSvg, famNoteCount, 'Notes'));
+            iconsRow.appendChild(famIcon(mediaIconSvg, famMediaCount, 'Media'));
+            chipEl.appendChild(iconsRow);
+        }
     }
 
     if (isDivorced) {
         // Divorced layout: top date / broken rings / bottom date.
-        // Use explicit positions so long localized dates do not collide with connectors.
         if (!compactMode) lineEl.classList.add('sp-couple-line-divorced');
 
         if (!compactMode && familyData.marriageDate) {
             var mDate = document.createElement('span');
             mDate.className = 'sp-couple-date sp-couple-date-top';
-            mDate.textContent = familyData.marriageDate;
-            if (familyData.marriageQuality) {
-                mDate.classList.add('sp-couple-date-' + familyData.marriageQuality);
-            }
+            var mDateText = document.createElement('span');
+            mDateText.className = 'sp-couple-chip-row';
+            mDateText.textContent = familyData.marriageDate;
             if (familyData.marriagePlace) {
                 var pm = document.createElement('span');
                 pm.className = 'sp-place-marker';
                 pm.innerHTML = '<svg viewBox="0 0 12 16" width="10" height="13" aria-hidden="true"><path d="M6 0C2.7 0 0 2.5 0 5.6 0 9.8 6 16 6 16s6-6.2 6-10.4C12 2.5 9.3 0 6 0zm0 7.6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z" fill="currentColor"/></svg>';
-                mDate.appendChild(pm);
+                mDateText.appendChild(pm);
                 mDate.title = familyData.marriageDate + ' | ' + familyData.marriagePlace;
             } else {
                 mDate.title = familyData.marriageDate;
             }
+            mDate.appendChild(mDateText);
             lineEl.appendChild(mDate);
         }
 
@@ -1156,65 +1195,58 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
         brokenRings.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.ringBrokenFill + '" fill-opacity="0.45" stroke="' + wtpCSSColors.ringBrokenStroke + '" stroke-width="1.8"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.ringBrokenFill + '" fill-opacity="0.45" stroke="' + wtpCSSColors.ringBrokenStroke + '" stroke-width="1.8"/><line x1="4" y1="2" x2="20" y2="12" stroke="' + wtpCSSColors.divorceLine + '" stroke-width="1.7"/></svg>';
         lineEl.appendChild(brokenRings);
 
-        if (!compactMode && familyData.divorceDate) {
+        if (!compactMode) {
             var dDate = document.createElement('span');
-            dDate.className = 'sp-couple-date sp-divorce-date sp-couple-date-bottom';
-            dDate.textContent = familyData.divorceDate;
-            if (familyData.divorceQuality) {
-                dDate.classList.add('sp-couple-date-' + familyData.divorceQuality);
+            dDate.className = 'sp-couple-date sp-couple-date-bottom';
+            if (familyData.divorceDate) dDate.classList.add('sp-divorce-date');
+            var hasBottomContent = familyData.divorceDate || familyData.durationLabel || famSourceCount > 0 || famNoteCount > 0 || famMediaCount > 0;
+            if (hasBottomContent) {
+                if (familyData.divorceDate) {
+                    var dDateText = document.createElement('span');
+                    dDateText.className = 'sp-couple-chip-row';
+                    dDateText.textContent = familyData.divorceDate;
+                    if (familyData.divorcePlace) {
+                        var dpm = document.createElement('span');
+                        dpm.className = 'sp-place-marker';
+                        dpm.innerHTML = '<svg viewBox="0 0 12 16" width="10" height="13" aria-hidden="true"><path d="M6 0C2.7 0 0 2.5 0 5.6 0 9.8 6 16 6 16s6-6.2 6-10.4C12 2.5 9.3 0 6 0zm0 7.6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z" fill="currentColor"/></svg>';
+                        dDateText.appendChild(dpm);
+                        dDate.title = familyData.divorceDate + ' | ' + familyData.divorcePlace;
+                    } else {
+                        dDate.title = familyData.divorceDate;
+                    }
+                    dDate.appendChild(dDateText);
+                }
+                appendChipExtras(dDate);
+                lineEl.appendChild(dDate);
             }
-            if (familyData.divorcePlace) {
-                var dpm = document.createElement('span');
-                dpm.className = 'sp-place-marker';
-                dpm.innerHTML = '<svg viewBox="0 0 12 16" width="10" height="13" aria-hidden="true"><path d="M6 0C2.7 0 0 2.5 0 5.6 0 9.8 6 16 6 16s6-6.2 6-10.4C12 2.5 9.3 0 6 0zm0 7.6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z" fill="currentColor"/></svg>';
-                dDate.appendChild(dpm);
-                dDate.title = familyData.divorceDate + ' | ' + familyData.divorcePlace;
-            } else {
-                dDate.title = familyData.divorceDate;
-            }
-            lineEl.appendChild(dDate);
-
-            if (familyData.durationLabel) {
-                var dDuration = document.createElement('span');
-                dDuration.className = 'sp-couple-duration';
-                dDuration.textContent = familyData.durationLabel;
-                dDuration.title = 'Relationship duration: ' + familyData.durationLabel;
-                lineEl.appendChild(dDuration);
-            }
-
-            appendFamilyMetrics();
         }
     } else if (isMarried) {
-        // Married layout: rings + optional date
+        // Married layout: rings + date chip with duration & icons
         var rings = document.createElement('span');
         rings.className = 'sp-couple-rings';
         rings.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.ringFemaleFill + '" fill-opacity="0.55" stroke="' + wtpCSSColors.ringFemaleStroke + '" stroke-width="1.8"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.ringMaleFill + '" fill-opacity="0.55" stroke="' + wtpCSSColors.ringMaleStroke + '" stroke-width="1.8"/></svg>';
         lineEl.appendChild(rings);
-        if (!compactMode && familyData.marriageDate) {
-            var mDate = document.createElement('span');
-            mDate.className = 'sp-couple-date';
-            mDate.textContent = familyData.marriageDate;
-            if (familyData.marriageQuality) {
-                mDate.classList.add('sp-couple-date-' + familyData.marriageQuality);
+        if (!compactMode) {
+            var hasChipContent = familyData.marriageDate || familyData.durationLabel || famSourceCount > 0 || famNoteCount > 0 || famMediaCount > 0;
+            if (hasChipContent) {
+                var mDate = document.createElement('span');
+                mDate.className = 'sp-couple-date';
+                if (familyData.marriageDate) {
+                    var mDateText = document.createElement('span');
+                    mDateText.className = 'sp-couple-chip-row';
+                    mDateText.textContent = familyData.marriageDate;
+                    if (familyData.marriagePlace) {
+                        var mpm = document.createElement('span');
+                        mpm.className = 'sp-place-marker';
+                        mpm.innerHTML = '<svg viewBox="0 0 12 16" width="10" height="13" aria-hidden="true"><path d="M6 0C2.7 0 0 2.5 0 5.6 0 9.8 6 16 6 16s6-6.2 6-10.4C12 2.5 9.3 0 6 0zm0 7.6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z" fill="currentColor"/></svg>';
+                        mDateText.appendChild(mpm);
+                        mDate.title = familyData.marriageDate + ' | ' + familyData.marriagePlace;
+                    }
+                    mDate.appendChild(mDateText);
+                }
+                appendChipExtras(mDate);
+                lineEl.appendChild(mDate);
             }
-            if (familyData.marriagePlace) {
-                var mpm = document.createElement('span');
-                mpm.className = 'sp-place-marker';
-                mpm.innerHTML = '<svg viewBox="0 0 12 16" width="10" height="13" aria-hidden="true"><path d="M6 0C2.7 0 0 2.5 0 5.6 0 9.8 6 16 6 16s6-6.2 6-10.4C12 2.5 9.3 0 6 0zm0 7.6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z" fill="currentColor"/></svg>';
-                mDate.appendChild(mpm);
-                mDate.title = familyData.marriageDate + ' | ' + familyData.marriagePlace;
-            }
-            lineEl.appendChild(mDate);
-
-            if (familyData.durationLabel) {
-                var mDuration = document.createElement('span');
-                mDuration.className = 'sp-couple-duration';
-                mDuration.textContent = familyData.durationLabel;
-                mDuration.title = 'Relationship duration: ' + familyData.durationLabel;
-                lineEl.appendChild(mDuration);
-            }
-
-            appendFamilyMetrics();
         }
     } else {
         // Unmarried couple — heart icon, no rings
@@ -1222,7 +1254,15 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
         heart.className = 'sp-couple-rings';
         heart.innerHTML = '<svg viewBox="0 0 20 18" width="48" height="42"><path d="M10 17s-7-4.35-7-10A4 4 0 0 1 10 4a4 4 0 0 1 7 3c0 5.65-7 10-7 10z" fill="' + wtpCSSColors.heartFill + '" fill-opacity="0.72" stroke="' + wtpCSSColors.heartStroke + '" stroke-width="1.5" stroke-linejoin="round"/></svg>';
         lineEl.appendChild(heart);
-        appendFamilyMetrics();
+        if (!compactMode) {
+            var hasExtras = familyData.durationLabel || famSourceCount > 0 || famNoteCount > 0 || famMediaCount > 0;
+            if (hasExtras) {
+                var uChip = document.createElement('span');
+                uChip.className = 'sp-couple-date';
+                appendChipExtras(uChip);
+                lineEl.appendChild(uChip);
+            }
+        }
     }
 
     return lineEl;
@@ -2365,6 +2405,7 @@ FamilyNavigator.prototype.initToolbar = function () {
         toggleSources.addEventListener('change', function () {
             nav.showSources = this.checked;
             nav.measureAndRender();
+            nav._toggleSourcesVisibility();
         });
     }
 
@@ -2784,16 +2825,24 @@ FamilyNavigator.prototype._navigateFromSearch = function (xref) {
 // ==========================================================================
 
 /**
- * Show or hide source/note counters on all person cards.
+ * Show or hide source/note counters on all person cards and couple chips.
  */
 FamilyNavigator.prototype._toggleSourcesVisibility = function () {
     var container = this.container;
     if (!container) return;
 
-    var display = this.showSources ? '' : 'none';
-    var counters = container.querySelectorAll('.sp-action-count, .sp-couple-metrics');
-    for (var i = 0; i < counters.length; i++) {
-        counters[i].style.display = display;
+    var show = this.showSources;
+
+    // Card-level action count badges
+    var badges = container.querySelectorAll('.sp-action-count');
+    for (var i = 0; i < badges.length; i++) {
+        badges[i].style.display = show ? '' : 'none';
+    }
+
+    // Couple-chip icon rows
+    var chipIcons = container.querySelectorAll('.sp-couple-chip-icons');
+    for (var j = 0; j < chipIcons.length; j++) {
+        chipIcons[j].style.display = show ? 'inline-flex' : 'none';
     }
 };
 

@@ -584,8 +584,9 @@
 
 .sp-couple-date {
     display: inline-flex;
+    flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     font-size: 11px;
     font-weight: 500;
     font-variant-numeric: tabular-nums;
@@ -594,44 +595,57 @@
     line-height: 1.2;
     z-index: 1;
     position: relative;
-    max-width: 132px;
-    overflow: hidden;
-    text-overflow: ellipsis;
     background: var(--wtp-chip-bg);
     border: 1px solid var(--wtp-chip-border);
-    border-radius: 999px;
+    border-radius: var(--sp-radius);
     padding: 4px 10px;
     backdrop-filter: blur(4px);
     transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.sp-couple-chip-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.sp-couple-chip-duration {
+    font-size: 9px;
+    font-weight: 400;
+    color: #64748b;
+    line-height: 1;
+}
+
+.sp-couple-chip-icons {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: 1px;
+}
+
+.sp-couple-chip-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    color: #9ca3af;
+}
+
+.sp-couple-chip-icon.sp-has-data {
+    color: #3b82f6;
+}
+
+.sp-couple-chip-icon .sp-action-count {
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1;
+    color: inherit;
 }
 
 .sp-couple-date .sp-place-marker {
     margin-left: 5px;
 }
 
-.sp-couple-date-approx {
-    border-style: dashed;
-}
-
-.sp-couple-date-range {
-    color: #475569;
-    border-color: rgba(71, 85, 105, 0.25);
-}
-
-.sp-couple-duration {
-    font-size: 10px;
-    color: #64748b;
-    line-height: 1;
-    margin-top: -1px;
-    z-index: 1;
-}
-
-.sp-couple-metrics {
-    font-size: 10px;
-    color: #728096;
-    line-height: 1;
-    z-index: 1;
-}
+/* legacy — replaced by .sp-couple-chip-duration / .sp-couple-chip-icons inside chip */
 
 .sp-divorce-date {
     color: #e74c3c;
@@ -1468,10 +1482,17 @@ body:has(.sp-fullview) nav[role="navigation"] {
     color: var(--wtp-marker-place);
 }
 
-.wtp-plugin-root .sp-couple-duration,
-.wtp-plugin-root .sp-couple-metrics,
+.wtp-plugin-root .sp-couple-chip-duration,
 .wtp-plugin-root .sp-card-counters {
     color: var(--wtp-duration-text);
+}
+
+.wtp-plugin-root .sp-couple-chip-icon.sp-has-data {
+    color: var(--wtp-accent, #3b82f6);
+}
+
+.wtp-plugin-root .sp-couple-chip-icon.sp-has-data .sp-action-count {
+    color: var(--wtp-accent, #3b82f6);
 }
 
 .wtp-plugin-root .sp-parent-age-father .sp-parent-age-icon {
@@ -1769,6 +1790,10 @@ body:has(.sp-fullview) nav[role="navigation"] {
         font-size: 10px;
         padding: 3px 8px;
     }
+
+    .sp-couple-chip-icons {
+        display: none;
+    }
 }
 
 /* Mobile phones */
@@ -1804,6 +1829,11 @@ body:has(.sp-fullview) nav[role="navigation"] {
     .sp-couple-date {
         font-size: 9px;
         padding: 2px 6px;
+    }
+
+    .sp-couple-chip-duration,
+    .sp-couple-chip-icons {
+        display: none;
     }
 }
 
