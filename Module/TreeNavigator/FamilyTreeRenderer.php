@@ -48,6 +48,12 @@ class FamilyTreeRenderer
     /** @var array<string, bool> Xrefs already rendered on the client (skip during expansion) */
     private array $knownXrefs = [];
 
+    /** @var int Maximum ancestor generation (0 = origin, positive = up) */
+    private int $maxGenUp = 4;
+
+    /** @var int Minimum descendant generation (0 = origin, negative = down) */
+    private int $maxGenDown = -3;
+
     /** @var array<string, array> Collected nodes keyed by unique id */
     private array $nodes = [];
 
@@ -151,7 +157,7 @@ class FamilyTreeRenderer
      *
      * @return string[] [html, js_init_code]
      */
-    public function buildViewport(Individual $person, int $depth, bool $expanded): array
+    public function buildViewport(Individual $person, bool $expanded): array
     {
         $cardName = $this->prefix . 'D';
         $this->prefix = $cardName;
@@ -160,7 +166,7 @@ class FamilyTreeRenderer
         $this->nodes = [];
         $this->edges = [];
         $this->visited = [];
-        $this->collectTree($person, $depth, 0, null, true, '');
+        $this->collectTree($person, 0, null, true, '');
 
         // Save nodeIdCounter to session so AJAX expansions continue from here
         $this->saveNodeIdCounter();
@@ -378,7 +384,7 @@ class FamilyTreeRenderer
      *
      * @return string The node ID assigned to this person's "couple node"
      */
-    private function collectTree(Individual $person, int $depth, int $direction,
+    private function collectTree(Individual $person, int $direction,
                                  ?Family $throughFamily, bool $isOrigin,
                                  string $pathChildXref, int $generation = 0): string
     {
@@ -648,7 +654,7 @@ class FamilyTreeRenderer
 
         // --- Ancestors above ---
         if ($direction >= 0) {
-            $this->collectAncestors($person, $nodeId, $depth, $throughFamily, $generation);
+            $this->collectAncestors($person, $nodeId, $throughFamily, $generation);
         }
 
         // --- Children below ---
@@ -677,7 +683,7 @@ class FamilyTreeRenderer
      * Collect ancestor nodes for a person.
      */
     private function collectAncestors(Individual $person, string $childNodeId,
-                                      int $depth, ?Family $throughFamily, int $generation = 0): void
+                                      ?Family $throughFamily, int $generation = 0): void
     {
         $xref = $person->xref();
         $parentFamily = $this->bestParentFamily($person);
@@ -686,9 +692,9 @@ class FamilyTreeRenderer
         if ($parentFamily instanceof Family) {
             $parentPerson = $parentFamily->husband() ?? $parentFamily->wife();
             if ($parentPerson instanceof Individual) {
-                if ($depth > 0) {
+                if ($generation + 1 <= $this->maxGenUp) {
                     $parentNodeId = $this->collectTree(
-                        $parentPerson, $depth - 1, 1, $parentFamily, false, $xref, $generation + 1
+                        $parentPerson, 1, $parentFamily, false, $xref, $generation + 1
                     );
                     $this->edges[] = [
                         'from' => $parentNodeId,
@@ -697,25 +703,8 @@ class FamilyTreeRenderer
                         'line' => 'self',
                         'lineIndex' => 0,
                     ];
-                } else {
-                    // Lazy placeholder
-                    $lazyId = $this->nextNodeId();
-                    $this->nodes[$lazyId] = [
-                        'id'    => $lazyId,
-                        'type'  => 'lazy',
-                        'familyXref' => $parentFamily->xref(),
-                        'label' => I18N::translate('Show parents'),
-                        'direction' => 'up',
-                        'generation' => $generation + 1,
-                    ];
-                    $this->edges[] = [
-                        'from' => $lazyId,
-                        'to'   => $childNodeId,
-                        'type' => 'parent-child',
-                        'line' => 'self',
-                        'lineIndex' => 0,
-                    ];
                 }
+                // Beyond limit: skip — tree icon on the card handles expansion
             } else {
                 // Both parents unknown — show placeholder if siblings exist
                 $hasSiblings = false;
@@ -778,9 +767,9 @@ class FamilyTreeRenderer
 
             $spParent = $spParentFam->husband() ?? $spParentFam->wife();
             if ($spParent instanceof Individual) {
-                if ($depth > 0) {
+                if ($generation + 1 <= $this->maxGenUp) {
                     $spParentNodeId = $this->collectTree(
-                        $spParent, $depth - 1, 1, $spParentFam, false, $spouse->xref(), $generation + 1
+                        $spParent, 1, $spParentFam, false, $spouse->xref(), $generation + 1
                     );
                     $this->edges[] = [
                         'from' => $spParentNodeId,
@@ -789,24 +778,8 @@ class FamilyTreeRenderer
                         'line' => 'spouse',
                         'lineIndex' => 1,
                     ];
-                } else {
-                    $lazyId = $this->nextNodeId();
-                    $this->nodes[$lazyId] = [
-                        'id'    => $lazyId,
-                        'type'  => 'lazy',
-                        'familyXref' => $spParentFam->xref(),
-                        'label' => I18N::translate('Show parents'),
-                        'direction' => 'up',
-                        'generation' => $generation + 1,
-                    ];
-                    $this->edges[] = [
-                        'from' => $lazyId,
-                        'to'   => $childNodeId,
-                        'type' => 'parent-child',
-                        'line' => 'spouse',
-                        'lineIndex' => 1,
-                    ];
                 }
+                // Beyond limit: skip — tree icon on the card handles expansion
             } else {
                 // Both spouse's parents unknown — show placeholder if siblings exist
                 $spHasSiblings = false;
@@ -888,8 +861,30 @@ class FamilyTreeRenderer
             return $ja <=> $jb;
         });
 
+        // Beyond generation limit — create a single lazy placeholder instead of recursing
+        if (count($allChildren) > 0 && $generation - 1 < $this->maxGenDown) {
+            $familyXref = $throughFamily instanceof Family ? $throughFamily->xref() : '';
+            $lazyId = $this->nextNodeId();
+            $this->nodes[$lazyId] = [
+                'id'    => $lazyId,
+                'type'  => 'lazy',
+                'personXref' => $person->xref(),
+                'familyXref' => $familyXref,
+                'label' => I18N::translate('Show descendants'),
+                'direction' => 'down',
+                'generation' => $generation - 1,
+            ];
+            $this->edges[] = [
+                'from' => $parentNodeId,
+                'to'   => $lazyId,
+                'type' => 'parent-child',
+                'familyIndex' => $familyIndex,
+            ];
+            return;
+        }
+
         foreach ($allChildren as $child) {
-            $childNodeId = $this->collectTree($child, 50, -1, null, false, '', $generation - 1);
+            $childNodeId = $this->collectTree($child, -1, null, false, '', $generation - 1);
             if ($childNodeId === '') {
                 continue;
             }
@@ -926,7 +921,7 @@ class FamilyTreeRenderer
         });
 
         foreach ($siblings as $child) {
-            $siblingNodeId = $this->collectTree($child, 0, -1, null, false, '', $generation);
+            $siblingNodeId = $this->collectTree($child, -1, null, false, '', $generation);
             if ($siblingNodeId === '') {
                 continue;
             }
@@ -1113,8 +1108,12 @@ class FamilyTreeRenderer
         $this->edges = [];
         $this->visited = [];
 
+        // Load exactly 1 ancestor generation per click (tree icon handles further expansion)
+        $this->maxGenUp = $generation;
+        $this->maxGenDown = $generation - 3;
+
         // personId = xref of the child whose parents we're expanding (to exclude from siblings)
-        $rootId = $this->collectTree($person, 2, 1, $family, false, $personId, $generation);
+        $rootId = $this->collectTree($person, 1, $family, false, $personId, $generation);
 
         // Save updated counter for subsequent AJAX calls
         $this->saveNodeIdCounter();
@@ -1141,7 +1140,7 @@ class FamilyTreeRenderer
         $this->visited = [];
         $this->nodeIdCounter = 0;
 
-        $rootId = $this->collectTree($person, 50, 0, null, true, '');
+        $rootId = $this->collectTree($person, 0, null, true, '');
 
         $this->saveNodeIdCounter();
 
@@ -1149,6 +1148,62 @@ class FamilyTreeRenderer
             'nodes' => array_values($this->nodes),
             'edges' => $this->edges,
             'rootId' => $rootId,
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * Expand descendants: return child subtrees via AJAX.
+     */
+    public function expandDescendants(string $personXref, string $familyXref, Tree $tree, int $generation = 0): string
+    {
+        $person = Registry::individualFactory()->make($personXref, $tree);
+        if (!$person instanceof Individual) {
+            return json_encode(['nodes' => [], 'edges' => [], 'childRootIds' => []]);
+        }
+
+        $family = ($familyXref !== '') ? Registry::familyFactory()->make($familyXref, $tree) : null;
+
+        $this->nodes = [];
+        $this->edges = [];
+        $this->visited = [];
+
+        // Set descendant limit relative to expansion point
+        $this->maxGenDown = $generation - 3;
+
+        // Collect children of the person from the matching family
+        $allChildren = [];
+        foreach ($person->spouseFamilies() as $fam) {
+            if ($family instanceof Family && $fam->xref() !== $family->xref()) {
+                continue;
+            }
+            foreach ($fam->children() as $child) {
+                $allChildren[] = $child;
+            }
+        }
+
+        usort($allChildren, static function (Individual $a, Individual $b): int {
+            $ja = $a->getBirthDate()->julianDay();
+            $jb = $b->getBirthDate()->julianDay();
+            if ($ja === 0 && $jb === 0) return 0;
+            if ($ja === 0) return 1;
+            if ($jb === 0) return -1;
+            return $ja <=> $jb;
+        });
+
+        $childRootIds = [];
+        foreach ($allChildren as $child) {
+            $childNodeId = $this->collectTree($child, -1, null, false, '', $generation);
+            if ($childNodeId !== '') {
+                $childRootIds[] = $childNodeId;
+            }
+        }
+
+        $this->saveNodeIdCounter();
+
+        return json_encode([
+            'nodes' => array_values($this->nodes),
+            'edges' => $this->edges,
+            'childRootIds' => $childRootIds,
         ], JSON_UNESCAPED_UNICODE);
     }
 

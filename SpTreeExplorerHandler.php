@@ -72,7 +72,13 @@ class SpTreeExplorerHandler extends AbstractModule implements RequestHandlerInte
         }
 
         $generation = Validator::queryParams($request)->integer('gen', 0);
-        $json = $renderer->expandNode($targetId, $personId, $tree, $generation);
+        $direction = Validator::queryParams($request)->string('dir', 'up');
+
+        if ($direction === 'down') {
+            $json = $renderer->expandDescendants($personId, $targetId, $tree, $generation);
+        } else {
+            $json = $renderer->expandNode($targetId, $personId, $tree, $generation);
+        }
 
         return response($json, 200, ['Content-Type' => 'application/json']);
     }

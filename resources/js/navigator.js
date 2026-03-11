@@ -145,7 +145,7 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.currentRootXref = '';
 
     // Expansion history — records each AJAX expansion for share-link replay
-    this._expansionHistory = []; // [{type:'lazy'|'ancestor', fid, pid, lineIndex?}]
+    this._expansionHistory = []; // [{type:'lazy'|'ancestor', fid, pid, dir?, lineIndex?}]
 
     // Sources visibility state (read from data attribute, default: off)
     var defaultSources = this.container ? this.container.getAttribute('data-default-sources') : '0';
@@ -2286,8 +2286,9 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
     var node = this.nodeMap[lazyNodeId];
     if (!node || node.type !== 'lazy') return;
 
+    var direction = node.direction || 'up';
     var fid = node.familyXref;
-    var pid = node.childXref || node.familyXref;
+    var pid = direction === 'down' ? (node.personXref || '') : (node.childXref || node.familyXref);
     var lazyGen = (node.generation !== undefined) ? node.generation : 0;
 
     var url = this.expandUrl
@@ -2295,6 +2296,7 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
         + '&fid=' + encodeURIComponent(fid)
         + '&pid=' + encodeURIComponent(pid)
         + '&gen=' + encodeURIComponent(lazyGen)
+        + '&dir=' + encodeURIComponent(direction)
         + '&known=' + encodeURIComponent(this._getKnownXrefs());
 
     this.showLoader(true);
@@ -2307,8 +2309,8 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
             if (xhr.status === 200 && xhr.responseText) {
                 try {
                     var newData = JSON.parse(xhr.responseText);
-                    if (newData.nodes && newData.nodes.length > 0) {
-                        nav._expansionHistory.push({ type: 'lazy', fid: fid, pid: pid });
+                    if ((newData.nodes && newData.nodes.length > 0) || (newData.childRootIds && newData.childRootIds.length > 0)) {
+                        nav._expansionHistory.push({ type: 'lazy', fid: fid, pid: pid, dir: direction });
                         nav.mergeLazyData(lazyNodeId, newData);
                     } else {
                         // Empty response — remove the lazy node silently
@@ -2331,88 +2333,159 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
 };
 
 /**
- * Merge newly loaded subtree data, replacing a lazy ancestor placeholder.
+ * Merge newly loaded subtree data, replacing a lazy placeholder.
+ * Handles both ancestor (direction='up') and descendant (direction='down') placeholders.
  */
 FamilyNavigator.prototype.mergeLazyData = function (lazyNodeId, newData) {
     var lazyNode = this.nodeMap[lazyNodeId];
+    var direction = (lazyNode && lazyNode.direction) || 'up';
 
-    // Find the edge that connects to this lazy node
-    var oldEdge = null;
+    if (direction === 'down') {
+        // Descendant expansion — lazy node is a child, find its parent
+        var parentId = null;
+        var oldEdge = null;
+        var parentEdgeList = this.parentEdges[lazyNodeId] || [];
+        if (parentEdgeList.length > 0) {
+            parentId = parentEdgeList[0].from;
+            var ek = parentId + '->' + lazyNodeId;
+            oldEdge = this.edgeMap[ek] || null;
+        }
 
-    // The lazy node IS the parent — find child via childrenMap
-    var childId = null;
-    if (this.childrenMap[lazyNodeId] && this.childrenMap[lazyNodeId].length > 0) {
-        childId = this.childrenMap[lazyNodeId][0];
-        var ek = lazyNodeId + '->' + childId;
-        oldEdge = this.edgeMap[ek] || null;
-    }
+        // Remove lazy node
+        delete this.nodeMap[lazyNodeId];
+        delete this.layoutMap[lazyNodeId];
 
-    var parentId = childId;
-
-    // Remove the lazy node
-    delete this.nodeMap[lazyNodeId];
-    delete this.layoutMap[lazyNodeId];
-
-    // Remove old edge(s)
-    if (parentId) {
-        var edgeKey = lazyNodeId + '->' + parentId;
-        delete this.edgeMap[edgeKey];
-        delete this.childrenMap[lazyNodeId];
+        // Remove old edges
+        if (parentId) {
+            var edgeKey = parentId + '->' + lazyNodeId;
+            delete this.edgeMap[edgeKey];
+            if (this.childrenMap[parentId]) {
+                this.childrenMap[parentId] = this.childrenMap[parentId].filter(function (id) {
+                    return id !== lazyNodeId;
+                });
+            }
+        }
         delete this.parentEdges[lazyNodeId];
-        // Clean parentEdges on the connected node
-        if (this.parentEdges[parentId]) {
-            this.parentEdges[parentId] = this.parentEdges[parentId].filter(function (e) {
-                return e.from !== lazyNodeId;
-            });
+        delete this.childrenMap[lazyNodeId];
+
+        // Add new nodes
+        for (var i = 0; i < newData.nodes.length; i++) {
+            var n = newData.nodes[i];
+            this.nodeMap[n.id] = n;
         }
-    }
 
-    // Add new nodes
-    for (var i = 0; i < newData.nodes.length; i++) {
-        var n = newData.nodes[i];
-        this.nodeMap[n.id] = n;
-    }
-
-    // Add new edges
-    for (var i = 0; i < newData.edges.length; i++) {
-        var edge = newData.edges[i];
-        var key = edge.from + '->' + edge.to;
-        this.edgeMap[key] = edge;
-
-        if (!this.childrenMap[edge.from]) {
-            this.childrenMap[edge.from] = [];
+        // Add new edges
+        for (var i = 0; i < newData.edges.length; i++) {
+            var edge = newData.edges[i];
+            var key = edge.from + '->' + edge.to;
+            this.edgeMap[key] = edge;
+            if (!this.childrenMap[edge.from]) this.childrenMap[edge.from] = [];
+            this.childrenMap[edge.from].push(edge.to);
+            if (!this.parentEdges[edge.to]) this.parentEdges[edge.to] = [];
+            this.parentEdges[edge.to].push(edge);
         }
-        this.childrenMap[edge.from].push(edge.to);
 
-        if (!this.parentEdges[edge.to]) {
-            this.parentEdges[edge.to] = [];
+        // Connect child roots to existing parent
+        if (parentId && newData.childRootIds) {
+            var familyIndex = (oldEdge && oldEdge.familyIndex !== undefined) ? oldEdge.familyIndex : 0;
+            for (var i = 0; i < newData.childRootIds.length; i++) {
+                var childRootId = newData.childRootIds[i];
+                var newEdge = {
+                    from: parentId,
+                    to: childRootId,
+                    type: 'parent-child',
+                    familyIndex: familyIndex
+                };
+                var newKey = parentId + '->' + childRootId;
+                this.edgeMap[newKey] = newEdge;
+                if (!this.childrenMap[parentId]) this.childrenMap[parentId] = [];
+                this.childrenMap[parentId].push(childRootId);
+                if (!this.parentEdges[childRootId]) this.parentEdges[childRootId] = [];
+                this.parentEdges[childRootId].push(newEdge);
+            }
         }
-        this.parentEdges[edge.to].push(edge);
-    }
 
-    // Connect the new ancestor root to the existing child
-    if (parentId && newData.rootId) {
-        var newEdge = {
-            from: newData.rootId,
-            to: parentId,
-            type: 'parent-child'
-        };
-        // Preserve lineIndex from old edge
-        if (oldEdge && oldEdge.lineIndex !== undefined) {
-            newEdge.lineIndex = oldEdge.lineIndex;
-            newEdge.line = oldEdge.line;
+        this.measureAndRender();
+        this.focusNode(parentId || (newData.childRootIds && newData.childRootIds.length > 0 ? newData.childRootIds[0] : null));
+    } else {
+        // Ancestor expansion (direction='up')
+        var oldEdge = null;
+
+        // The lazy node IS the parent — find child via childrenMap
+        var childId = null;
+        if (this.childrenMap[lazyNodeId] && this.childrenMap[lazyNodeId].length > 0) {
+            childId = this.childrenMap[lazyNodeId][0];
+            var ek = lazyNodeId + '->' + childId;
+            oldEdge = this.edgeMap[ek] || null;
         }
-        var newKey = newData.rootId + '->' + parentId;
-        this.edgeMap[newKey] = newEdge;
-        if (!this.childrenMap[newData.rootId]) this.childrenMap[newData.rootId] = [];
-        this.childrenMap[newData.rootId].push(parentId);
-        if (!this.parentEdges[parentId]) this.parentEdges[parentId] = [];
-        this.parentEdges[parentId].push(newEdge);
-    }
 
-    // Re-measure and re-render, then center on the connected node
-    this.measureAndRender();
-    this.focusNode(parentId || newData.rootId);
+        var parentId = childId;
+
+        // Remove the lazy node
+        delete this.nodeMap[lazyNodeId];
+        delete this.layoutMap[lazyNodeId];
+
+        // Remove old edge(s)
+        if (parentId) {
+            var edgeKey = lazyNodeId + '->' + parentId;
+            delete this.edgeMap[edgeKey];
+            delete this.childrenMap[lazyNodeId];
+            delete this.parentEdges[lazyNodeId];
+            // Clean parentEdges on the connected node
+            if (this.parentEdges[parentId]) {
+                this.parentEdges[parentId] = this.parentEdges[parentId].filter(function (e) {
+                    return e.from !== lazyNodeId;
+                });
+            }
+        }
+
+        // Add new nodes
+        for (var i = 0; i < newData.nodes.length; i++) {
+            var n = newData.nodes[i];
+            this.nodeMap[n.id] = n;
+        }
+
+        // Add new edges
+        for (var i = 0; i < newData.edges.length; i++) {
+            var edge = newData.edges[i];
+            var key = edge.from + '->' + edge.to;
+            this.edgeMap[key] = edge;
+
+            if (!this.childrenMap[edge.from]) {
+                this.childrenMap[edge.from] = [];
+            }
+            this.childrenMap[edge.from].push(edge.to);
+
+            if (!this.parentEdges[edge.to]) {
+                this.parentEdges[edge.to] = [];
+            }
+            this.parentEdges[edge.to].push(edge);
+        }
+
+        // Connect the new ancestor root to the existing child
+        if (parentId && newData.rootId) {
+            var newEdge = {
+                from: newData.rootId,
+                to: parentId,
+                type: 'parent-child'
+            };
+            // Preserve lineIndex from old edge
+            if (oldEdge && oldEdge.lineIndex !== undefined) {
+                newEdge.lineIndex = oldEdge.lineIndex;
+                newEdge.line = oldEdge.line;
+            }
+            var newKey = newData.rootId + '->' + parentId;
+            this.edgeMap[newKey] = newEdge;
+            if (!this.childrenMap[newData.rootId]) this.childrenMap[newData.rootId] = [];
+            this.childrenMap[newData.rootId].push(parentId);
+            if (!this.parentEdges[parentId]) this.parentEdges[parentId] = [];
+            this.parentEdges[parentId].push(newEdge);
+        }
+
+        // Re-measure and re-render, then center on the connected node
+        this.measureAndRender();
+        this.focusNode(parentId || newData.rootId);
+    }
 };
 
 // ==========================================================================
@@ -2875,7 +2948,7 @@ FamilyNavigator.prototype.copyShareLink = function (btnEl) {
     for (var i = 0; i < this._expansionHistory.length; i++) {
         var h = this._expansionHistory[i];
         if (h.type === 'lazy') {
-            lazyParts.push(h.fid + '.' + h.pid);
+            lazyParts.push(h.fid + '.' + h.pid + '.' + (h.dir || 'up'));
         } else if (h.type === 'ancestor') {
             ancParts.push(h.fid + '.' + h.pid + '.' + h.lineIndex);
         }
@@ -3130,7 +3203,7 @@ FamilyNavigator.prototype._replayExpansions = function (expList, ancList, callba
     for (var i = 0; i < expList.length; i++) {
         var parts = expList[i].split('.');
         if (parts.length >= 2) {
-            queue.push({ type: 'lazy', fid: parts[0], pid: parts[1] });
+            queue.push({ type: 'lazy', fid: parts[0], pid: parts[1], dir: parts[2] || 'up' });
         }
     }
     for (var i = 0; i < ancList.length; i++) {
@@ -3156,7 +3229,7 @@ FamilyNavigator.prototype._replayExpansions = function (expList, ancList, callba
 
         var item = queue[idx];
         if (item.type === 'lazy') {
-            nav._replayLazyExpand(item.fid, item.pid, function () {
+            nav._replayLazyExpand(item.fid, item.pid, item.dir, function () {
                 processNext(idx + 1);
             });
         } else {
@@ -3172,8 +3245,9 @@ FamilyNavigator.prototype._replayExpansions = function (expList, ancList, callba
 /**
  * Find and expand a lazy node matching the given family/person xrefs.
  */
-FamilyNavigator.prototype._replayLazyExpand = function (fid, pid, callback) {
+FamilyNavigator.prototype._replayLazyExpand = function (fid, pid, dir, callback) {
     var nav = this;
+    var direction = dir || 'up';
 
     // Find the lazy node with matching familyXref
     var lazyNodeId = null;
@@ -3198,6 +3272,7 @@ FamilyNavigator.prototype._replayLazyExpand = function (fid, pid, callback) {
         + '&fid=' + encodeURIComponent(fid)
         + '&pid=' + encodeURIComponent(pid)
         + '&gen=' + encodeURIComponent(lazyGen)
+        + '&dir=' + encodeURIComponent(direction)
         + '&known=' + encodeURIComponent(this._getKnownXrefs());
 
     var xhr = new XMLHttpRequest();
@@ -3207,8 +3282,8 @@ FamilyNavigator.prototype._replayLazyExpand = function (fid, pid, callback) {
             if (xhr.status === 200 && xhr.responseText) {
                 try {
                     var newData = JSON.parse(xhr.responseText);
-                    if (newData.nodes && newData.nodes.length > 0) {
-                        nav._expansionHistory.push({ type: 'lazy', fid: fid, pid: pid });
+                    if ((newData.nodes && newData.nodes.length > 0) || (newData.childRootIds && newData.childRootIds.length > 0)) {
+                        nav._expansionHistory.push({ type: 'lazy', fid: fid, pid: pid, dir: direction });
                         nav.mergeLazyData(lazyNodeId, newData);
                     }
                 } catch (e) {

@@ -216,8 +216,6 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
                 ]);
         }
 
-        $depth = 50;
-
         $moduleName = Validator::attributes($request)->string('module');
 
         $prefix = 'spN01';
@@ -229,7 +227,7 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
         );
         $renderer->prepare();
 
-        [$cardHtml, $initScript] = $renderer->buildViewport($individual, $depth, true);
+        [$cardHtml, $initScript] = $renderer->buildViewport($individual, true);
 
         return $this->viewResponse('modules/spNavigator/diagram', [
             'individual'  => $individual,
