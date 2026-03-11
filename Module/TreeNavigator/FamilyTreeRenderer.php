@@ -393,16 +393,63 @@ class FamilyTreeRenderer
         $childBirthJd = $person->getBirthDate()->julianDay();
         $originalChildXref = $xref;
 
-        // Cycle guard
+        // Cycle guard — person already visited in this direction (pedigree collapse).
+        // Build a display-only node with spouse data so it renders as a couple
+        // card with a proper couple-line, but do NOT recurse into ancestors/children.
         $visitKey = $xref . ':' . $direction;
         if (isset($this->visited[$visitKey])) {
             $nodeId = $this->nextNodeId();
             $personData = $this->buildPersonData($person, $isOrigin);
+
+            $guardFamilies = [];
+            $guardSwapped = false;
+            $guardSpouseFams = $person->spouseFamilies()->toArray();
+            usort($guardSpouseFams, [$this, 'compareByMarriageDate']);
+
+            foreach ($guardSpouseFams as $gfi => $gSpFam) {
+                $gSpouse = $gSpFam->spouse($person);
+                $gSpouseData = null;
+                if ($gSpouse instanceof Individual) {
+                    // Gender swap for single-family ancestor nodes
+                    if (count($guardSpouseFams) === 1
+                        && $person->sex() === 'F' && $gSpouse->sex() === 'M') {
+                        $gSpouseData = $personData;
+                        $personData = $this->buildPersonData($gSpouse);
+                        $guardSwapped = true;
+                        $originalChildXref = $xref;
+                    } else {
+                        $gSpouseData = $this->buildPersonData($gSpouse);
+                    }
+                }
+                $guardFamilies[] = [
+                    'spouse'                 => $gSpouseData,
+                    'marriageDate'           => '',
+                    'marriagePlace'          => '',
+                    'marriageQuality'        => 'unknown',
+                    'married'                => false,
+                    'divorced'               => false,
+                    'divorceDate'            => '',
+                    'divorcePlace'           => '',
+                    'divorceQuality'         => 'unknown',
+                    'durationLabel'          => '',
+                    'hasNextRelationship'    => isset($guardSpouseFams[$gfi + 1]),
+                    'familySourceCount'      => 0,
+                    'familyNoteCount'        => 0,
+                    'familyMediaCount'       => 0,
+                    'familyUrl'              => $gSpFam->url(),
+                    'familyXref'             => $gSpFam->xref(),
+                    'spouseHasParents'       => false,
+                    'spouseParentFamilyXref' => '',
+                    'husbandAgeAtMarriage'   => null,
+                    'wifeAgeAtMarriage'      => null,
+                ];
+            }
+
             $this->nodes[$nodeId] = [
                 'id'        => $nodeId,
                 'type'      => 'couple',
                 'person'    => $personData,
-                'families'  => [],
+                'families'  => $guardFamilies,
                 'isOrigin'  => false,
                 'direction' => $direction,
                 'generation' => $generation,
@@ -410,9 +457,25 @@ class FamilyTreeRenderer
                 'ancestorLines' => [],
                 'activeAncestorLine' => 0,
                 'personHasParents' => false,
+                'genderSwapped' => $guardSwapped,
                 'childBirthJd' => $childBirthJd,
                 'originalChildXref' => $originalChildXref,
             ];
+
+            // In ancestor direction, collect siblings/half-siblings below the
+            // cycle-guard node just like a regular ancestor node would.
+            // collectSiblings → collectTree checks $this->visited / knownXrefs
+            // so duplicates are safely prevented.
+            if ($direction === 1) {
+                foreach ($guardSpouseFams as $gfi => $gSpFam) {
+                    if ($throughFamily instanceof Family && $gSpFam->xref() === $throughFamily->xref()) {
+                        $this->collectSiblings($throughFamily, $pathChildXref, $nodeId, $gfi, $generation);
+                    } else {
+                        $this->collectSiblings($gSpFam, '', $nodeId, $gfi, $generation);
+                    }
+                }
+            }
+
             return $nodeId;
         }
         $this->visited[$visitKey] = true;
@@ -647,12 +710,10 @@ class FamilyTreeRenderer
             'originalChildXref' => $originalChildXref,
         ];
 
-        // --- Ancestors above ---
-        if ($direction >= 0) {
-            $this->collectAncestors($person, $nodeId, $throughFamily, $generation);
-        }
-
-        // --- Children below ---
+        // --- Children below (collected BEFORE ancestors so that the main
+        //     descendant tree gets first-visit priority; ancestor-sibling
+        //     walks that revisit the same people via pedigree collapse will
+        //     then correctly hit the cycle guard instead of stealing slots) ---
         if ($direction <= 0) {
             foreach ($familyObjects as $fi => $famObj) {
                 $this->collectChildren($person, $nodeId, $famObj, '', $fi, $generation);
@@ -669,6 +730,11 @@ class FamilyTreeRenderer
                     $this->collectSiblings($famObj, '', $nodeId, $fi, $generation);
                 }
             }
+        }
+
+        // --- Ancestors above (after descendants, see comment above) ---
+        if ($direction >= 0) {
+            $this->collectAncestors($person, $nodeId, $throughFamily, $generation);
         }
 
         return $nodeId;
