@@ -144,6 +144,9 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     // Track the currently displayed root person xref (for share links)
     this.currentRootXref = '';
 
+    // Expansion history — records each AJAX expansion for share-link replay
+    this._expansionHistory = []; // [{type:'lazy'|'ancestor', fid, pid, lineIndex?}]
+
     // Sources visibility state (read from data attribute, default: off)
     var defaultSources = this.container ? this.container.getAttribute('data-default-sources') : '0';
     this.showSources = defaultSources === '1';
@@ -188,12 +191,38 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.initToolbar();
     this.initSearch();
 
-    // Center on root and hide overlay
-    if (this.startExpanded) {
-        this.focusOrigin();
+    // Restore view state from URL — expansions, then zoom/position
+    var pendingExp = urlParams.get('exp');
+    var pendingAnc = urlParams.get('anc');
+    var urlZoom = urlParams.get('z');
+    var urlCx = urlParams.get('cx');
+    var urlCy = urlParams.get('cy');
+    var hasViewState = urlZoom && urlCx && urlCy;
+
+    if (pendingExp || pendingAnc) {
+        // Replay expansions, then restore zoom/position
+        var expList = pendingExp ? pendingExp.split(',') : [];
+        var ancList = pendingAnc ? pendingAnc.split(',') : [];
+        var self = this;
+        this._replayExpansions(expList, ancList, function () {
+            if (hasViewState) {
+                self._restoreViewState(parseFloat(urlZoom), parseFloat(urlCx), parseFloat(urlCy));
+            } else if (self.startExpanded) {
+                self.focusOrigin();
+            }
+            self.hideOverlay();
+            self._updateFocusPersonBox();
+        });
+    } else {
+        // No expansions to replay — restore zoom/position directly
+        if (hasViewState) {
+            this._restoreViewState(parseFloat(urlZoom), parseFloat(urlCx), parseFloat(urlCy));
+        } else if (this.startExpanded) {
+            this.focusOrigin();
+        }
+        this.hideOverlay();
+        this._updateFocusPersonBox();
     }
-    this.hideOverlay();
-    this._updateFocusPersonBox();
 }
 
 /**
@@ -367,7 +396,11 @@ FamilyNavigator.prototype.getVisibleParents = function (nodeId) {
  * Compute subtree width bottom-up.
  * Returns the width needed for the subtree rooted at nodeId.
  */
-FamilyNavigator.prototype.measureSubtree = function (nodeId) {
+FamilyNavigator.prototype.measureSubtree = function (nodeId, _visited) {
+    if (!_visited) _visited = {};
+    if (_visited[nodeId]) return 0;
+    _visited[nodeId] = true;
+
     var node = this.nodeMap[nodeId];
     if (!node) return 0;
 
@@ -390,7 +423,7 @@ FamilyNavigator.prototype.measureSubtree = function (nodeId) {
                 childrenTotalW += this.FAMILY_GROUP_GAP;
             }
         }
-        childrenTotalW += this.measureSubtree(children[i]);
+        childrenTotalW += this.measureSubtree(children[i], _visited);
     }
 
     var subtreeW = Math.max(nodeW, childrenTotalW);
@@ -492,7 +525,11 @@ FamilyNavigator.prototype.measureAndRender = function () {
  * Top-down positioning: assign x, y to each node.
  * The tree is drawn top-down: visual root at top, origin in middle, children below.
  */
-FamilyNavigator.prototype.positionSubtree = function (nodeId, x, y) {
+FamilyNavigator.prototype.positionSubtree = function (nodeId, x, y, _visited) {
+    if (!_visited) _visited = {};
+    if (_visited[nodeId]) return;
+    _visited[nodeId] = true;
+
     var layout = this.layoutMap[nodeId];
     if (!layout) return;
 
@@ -533,7 +570,7 @@ FamilyNavigator.prototype.positionSubtree = function (nodeId, x, y) {
     for (var i = 0; i < children.length; i++) {
         var cid = children[i];
         var cLayout = this.layoutMap[cid];
-        this.positionSubtree(cid, childX, childY);
+        this.positionSubtree(cid, childX, childY, _visited);
         var gap = this.H_GAP;
         if (i + 1 < children.length) {
             var prevFi = this._childFamilyIndex(nodeId, children[i]);
@@ -581,7 +618,11 @@ FamilyNavigator.prototype._alignChildRow = function (siblingIds) {
  * Shift a subtree vertically by dy pixels.
  * @param {boolean} childrenOnly - if true, only shift children, not the node itself
  */
-FamilyNavigator.prototype._shiftSubtree = function (nodeId, dy, childrenOnly) {
+FamilyNavigator.prototype._shiftSubtree = function (nodeId, dy, childrenOnly, _visited) {
+    if (!_visited) _visited = {};
+    if (_visited[nodeId]) return;
+    _visited[nodeId] = true;
+
     if (!childrenOnly) {
         var l = this.layoutMap[nodeId];
         if (l && l.y !== undefined) {
@@ -590,7 +631,7 @@ FamilyNavigator.prototype._shiftSubtree = function (nodeId, dy, childrenOnly) {
     }
     var children = this.getVisibleChildren(nodeId);
     for (var i = 0; i < children.length; i++) {
-        this._shiftSubtree(children[i], dy, false);
+        this._shiftSubtree(children[i], dy, false, _visited);
     }
 };
 
@@ -2057,6 +2098,25 @@ FamilyNavigator.prototype.switchAncestorLine = function (nodeId, lineIndex) {
 };
 
 /**
+ * Collect all person/spouse xrefs currently in the tree.
+ * Used to tell the server which people are already rendered.
+ */
+FamilyNavigator.prototype._getKnownXrefs = function () {
+    var xrefs = {};
+    for (var id in this.nodeMap) {
+        var n = this.nodeMap[id];
+        if (n.person && n.person.xref) xrefs[n.person.xref] = true;
+        if (n.families) {
+            for (var fi = 0; fi < n.families.length; fi++) {
+                var sp = n.families[fi].spouse;
+                if (sp && sp.xref) xrefs[sp.xref] = true;
+            }
+        }
+    }
+    return Object.keys(xrefs).join(',');
+};
+
+/**
  * Load ancestors for a node that doesn't have them yet.
  * Navigates to the person, reloading the entire tree centered on them.
  */
@@ -2087,7 +2147,8 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
     var url = this.expandUrl
         + '&instance=' + encodeURIComponent(this.cardPrefix)
         + '&fid=' + encodeURIComponent(familyXref)
-        + '&pid=' + encodeURIComponent(childXref);
+        + '&pid=' + encodeURIComponent(childXref)
+        + '&known=' + encodeURIComponent(this._getKnownXrefs());
 
     this.showLoader(true);
 
@@ -2100,6 +2161,7 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
                 try {
                     var newData = JSON.parse(xhr.responseText);
                     if (newData.nodes && newData.nodes.length > 0) {
+                        nav._expansionHistory.push({ type: 'ancestor', fid: familyXref, pid: childXref, lineIndex: lineIndex });
                         nav._mergeAncestorData(childNodeId, newData, lineIndex);
                     }
                 } catch (e) {
@@ -2194,6 +2256,7 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
                         // Replace the entire tree
                         nav.treeData = newData;
                         nav.activeLines = {};
+                        nav._expansionHistory = [];
 
                         nav.buildIndex(newData);
                         nav._setCurrentXref(xref);
@@ -2219,10 +2282,14 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
     var node = this.nodeMap[lazyNodeId];
     if (!node || node.type !== 'lazy') return;
 
+    var fid = node.familyXref;
+    var pid = node.childXref || node.familyXref;
+
     var url = this.expandUrl
         + '&instance=' + encodeURIComponent(this.cardPrefix)
-        + '&fid=' + encodeURIComponent(node.familyXref)
-        + '&pid=' + encodeURIComponent(node.childXref || node.familyXref);
+        + '&fid=' + encodeURIComponent(fid)
+        + '&pid=' + encodeURIComponent(pid)
+        + '&known=' + encodeURIComponent(this._getKnownXrefs());
 
     this.showLoader(true);
 
@@ -2235,6 +2302,7 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
                 try {
                     var newData = JSON.parse(xhr.responseText);
                     if (newData.nodes && newData.nodes.length > 0) {
+                        nav._expansionHistory.push({ type: 'lazy', fid: fid, pid: pid });
                         nav.mergeLazyData(lazyNodeId, newData);
                     } else {
                         // Empty response — remove the lazy node silently
@@ -2257,39 +2325,23 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
 };
 
 /**
- * Merge newly loaded subtree data, replacing the lazy placeholder.
+ * Merge newly loaded subtree data, replacing a lazy ancestor placeholder.
  */
 FamilyNavigator.prototype.mergeLazyData = function (lazyNodeId, newData) {
     var lazyNode = this.nodeMap[lazyNodeId];
-    var lazyDirection = lazyNode ? lazyNode.direction : 'up';
 
     // Find the edge that connects to this lazy node
-    var lazyParentEdges = this.parentEdges[lazyNodeId] || [];
-    var parentId = lazyParentEdges.length > 0 ? lazyParentEdges[0].from : null;
-    var oldEdge = lazyParentEdges.length > 0 ? lazyParentEdges[0] : null;
+    var oldEdge = null;
 
-    // For descendant lazy nodes, the lazy node is a child — find parent via childrenMap
-    if (!parentId && lazyDirection === 'down') {
-        for (var pid in this.childrenMap) {
-            var idx = this.childrenMap[pid].indexOf(lazyNodeId);
-            if (idx >= 0) {
-                parentId = pid;
-                var ek = pid + '->' + lazyNodeId;
-                oldEdge = this.edgeMap[ek] || null;
-                break;
-            }
-        }
-    }
-
-    // For ancestor lazy nodes, the lazy IS the parent — find child via childrenMap
+    // The lazy node IS the parent — find child via childrenMap
     var childId = null;
-    if (lazyDirection === 'up' && this.childrenMap[lazyNodeId] && this.childrenMap[lazyNodeId].length > 0) {
+    if (this.childrenMap[lazyNodeId] && this.childrenMap[lazyNodeId].length > 0) {
         childId = this.childrenMap[lazyNodeId][0];
         var ek = lazyNodeId + '->' + childId;
         oldEdge = this.edgeMap[ek] || null;
-        // For ancestor lazy, "parentId" is actually the child the new root should connect TO
-        parentId = childId;
     }
+
+    var parentId = childId;
 
     // Remove the lazy node
     delete this.nodeMap[lazyNodeId];
@@ -2297,13 +2349,8 @@ FamilyNavigator.prototype.mergeLazyData = function (lazyNodeId, newData) {
 
     // Remove old edge(s)
     if (parentId) {
-        var edgeKey = parentId + '->' + lazyNodeId;
+        var edgeKey = lazyNodeId + '->' + parentId;
         delete this.edgeMap[edgeKey];
-        var edgeKey2 = lazyNodeId + '->' + parentId;
-        delete this.edgeMap[edgeKey2];
-        // Clean childrenMap in both directions
-        var cidx = this.childrenMap[parentId] ? this.childrenMap[parentId].indexOf(lazyNodeId) : -1;
-        if (cidx >= 0) this.childrenMap[parentId].splice(cidx, 1);
         delete this.childrenMap[lazyNodeId];
         delete this.parentEdges[lazyNodeId];
         // Clean parentEdges on the connected node
@@ -2337,41 +2384,24 @@ FamilyNavigator.prototype.mergeLazyData = function (lazyNodeId, newData) {
         this.parentEdges[edge.to].push(edge);
     }
 
-    // Connect the new subtree root to the existing tree
+    // Connect the new ancestor root to the existing child
     if (parentId && newData.rootId) {
-        var newEdge;
-        if (lazyDirection === 'down') {
-            // Descendant lazy: parent -> newRoot (newRoot is a child of parent)
-            newEdge = {
-                from: parentId,
-                to: newData.rootId,
-                type: 'parent-child'
-            };
-            var newKey = parentId + '->' + newData.rootId;
-            this.edgeMap[newKey] = newEdge;
-            if (!this.childrenMap[parentId]) this.childrenMap[parentId] = [];
-            this.childrenMap[parentId].push(newData.rootId);
-            if (!this.parentEdges[newData.rootId]) this.parentEdges[newData.rootId] = [];
-            this.parentEdges[newData.rootId].push(newEdge);
-        } else {
-            // Ancestor lazy: newRoot -> parent (newRoot is an ancestor of parent)
-            newEdge = {
-                from: newData.rootId,
-                to: parentId,
-                type: 'parent-child'
-            };
-            // Preserve lineIndex from old edge
-            if (oldEdge && oldEdge.lineIndex !== undefined) {
-                newEdge.lineIndex = oldEdge.lineIndex;
-                newEdge.line = oldEdge.line;
-            }
-            var newKey = newData.rootId + '->' + parentId;
-            this.edgeMap[newKey] = newEdge;
-            if (!this.childrenMap[newData.rootId]) this.childrenMap[newData.rootId] = [];
-            this.childrenMap[newData.rootId].push(parentId);
-            if (!this.parentEdges[parentId]) this.parentEdges[parentId] = [];
-            this.parentEdges[parentId].push(newEdge);
+        var newEdge = {
+            from: newData.rootId,
+            to: parentId,
+            type: 'parent-child'
+        };
+        // Preserve lineIndex from old edge
+        if (oldEdge && oldEdge.lineIndex !== undefined) {
+            newEdge.lineIndex = oldEdge.lineIndex;
+            newEdge.line = oldEdge.line;
         }
+        var newKey = newData.rootId + '->' + parentId;
+        this.edgeMap[newKey] = newEdge;
+        if (!this.childrenMap[newData.rootId]) this.childrenMap[newData.rootId] = [];
+        this.childrenMap[newData.rootId].push(parentId);
+        if (!this.parentEdges[parentId]) this.parentEdges[parentId] = [];
+        this.parentEdges[parentId].push(newEdge);
     }
 
     // Re-measure and re-render, then center on the connected node
@@ -2809,27 +2839,52 @@ FamilyNavigator.prototype._setCurrentXref = function (targetXref) {
 
 /**
  * Build a shareable URL for the current tree view and copy it to clipboard.
+ * Captures toggle states, zoom, viewport center, and expansion history.
  */
 FamilyNavigator.prototype.copyShareLink = function (btnEl) {
     var url = new URL(window.location.href);
     if (this.currentRootXref) {
         url.searchParams.set('xref', this.currentRootXref);
     }
-    if (this.showSources) {
-        url.searchParams.set('sources', '1');
-    } else {
-        url.searchParams.delete('sources');
+    // Toggle states — always explicit so recipient sees sender's exact view
+    url.searchParams.set('sources', this.showSources ? '1' : '0');
+    url.searchParams.set('details', this.showDetails ? '1' : '0');
+    url.searchParams.set('advanced', this.showAdvancedControls ? '1' : '0');
+
+    // Zoom level
+    url.searchParams.set('z', this.zoomLevel.toFixed(2));
+
+    // Viewport center in tree coordinates (screen-size independent)
+    if (this.container) {
+        var wrapRect = this.container.getBoundingClientRect();
+        var cx = (wrapRect.width / 2 - this.panX) / this.zoomLevel;
+        var cy = (wrapRect.height / 2 - this.panY) / this.zoomLevel;
+        url.searchParams.set('cx', Math.round(cx));
+        url.searchParams.set('cy', Math.round(cy));
     }
-    if (!this.showDetails) {
-        url.searchParams.set('details', '0');
-    } else {
-        url.searchParams.delete('details');
+
+    // Expansion history — lazy expansions
+    var lazyParts = [];
+    var ancParts = [];
+    for (var i = 0; i < this._expansionHistory.length; i++) {
+        var h = this._expansionHistory[i];
+        if (h.type === 'lazy') {
+            lazyParts.push(h.fid + '.' + h.pid);
+        } else if (h.type === 'ancestor') {
+            ancParts.push(h.fid + '.' + h.pid + '.' + h.lineIndex);
+        }
     }
-    if (!this.showAdvancedControls) {
-        url.searchParams.set('advanced', '0');
+    if (lazyParts.length > 0) {
+        url.searchParams.set('exp', lazyParts.join(','));
     } else {
-        url.searchParams.delete('advanced');
+        url.searchParams.delete('exp');
     }
+    if (ancParts.length > 0) {
+        url.searchParams.set('anc', ancParts.join(','));
+    } else {
+        url.searchParams.delete('anc');
+    }
+
     var shareUrl = url.toString();
 
     navigator.clipboard.writeText(shareUrl).then(function () {
@@ -3041,6 +3096,178 @@ FamilyNavigator.prototype._applyToggleClasses = function () {
     if (!container) return;
     container.classList.toggle('sp-hide-details', !this.showDetails);
     container.classList.toggle('sp-hide-advanced', !this.showAdvancedControls);
+};
+
+/**
+ * Restore viewport to a specific zoom level and tree-coordinate center.
+ */
+FamilyNavigator.prototype._restoreViewState = function (zoom, cx, cy) {
+    if (!this.container) return;
+    this.zoomLevel = Math.min(this.zoomMax, Math.max(this.zoomMin, zoom));
+    var wrapRect = this.container.getBoundingClientRect();
+    this.panX = wrapRect.width / 2 - cx * this.zoomLevel;
+    this.panY = wrapRect.height / 2 - cy * this.zoomLevel;
+    this.applyTransform();
+};
+
+/**
+ * Replay expansion history from URL params (sequential AJAX).
+ * @param {string[]} expList  - lazy expansions as "fid.pid" strings
+ * @param {string[]} ancList  - ancestor expansions as "fid.pid.lineIndex" strings
+ * @param {function} callback - called when all expansions are done
+ */
+FamilyNavigator.prototype._replayExpansions = function (expList, ancList, callback) {
+    var nav = this;
+    var queue = [];
+
+    // Build ordered queue: lazy first, then ancestors
+    for (var i = 0; i < expList.length; i++) {
+        var parts = expList[i].split('.');
+        if (parts.length >= 2) {
+            queue.push({ type: 'lazy', fid: parts[0], pid: parts[1] });
+        }
+    }
+    for (var i = 0; i < ancList.length; i++) {
+        var parts = ancList[i].split('.');
+        if (parts.length >= 3) {
+            queue.push({ type: 'ancestor', fid: parts[0], pid: parts[1], lineIndex: parseInt(parts[2], 10) });
+        }
+    }
+
+    if (queue.length === 0) {
+        callback();
+        return;
+    }
+
+    nav.showLoader(true);
+
+    function processNext(idx) {
+        if (idx >= queue.length) {
+            nav.showLoader(false);
+            callback();
+            return;
+        }
+
+        var item = queue[idx];
+        if (item.type === 'lazy') {
+            nav._replayLazyExpand(item.fid, item.pid, function () {
+                processNext(idx + 1);
+            });
+        } else {
+            nav._replayAncestorExpand(item.fid, item.pid, item.lineIndex, function () {
+                processNext(idx + 1);
+            });
+        }
+    }
+
+    processNext(0);
+};
+
+/**
+ * Find and expand a lazy node matching the given family/person xrefs.
+ */
+FamilyNavigator.prototype._replayLazyExpand = function (fid, pid, callback) {
+    var nav = this;
+
+    // Find the lazy node with matching familyXref
+    var lazyNodeId = null;
+    for (var id in this.nodeMap) {
+        var n = this.nodeMap[id];
+        if (n.type === 'lazy' && n.familyXref === fid) {
+            lazyNodeId = id;
+            break;
+        }
+    }
+
+    if (!lazyNodeId) {
+        callback();
+        return;
+    }
+
+    var url = this.expandUrl
+        + '&instance=' + encodeURIComponent(this.cardPrefix)
+        + '&fid=' + encodeURIComponent(fid)
+        + '&pid=' + encodeURIComponent(pid)
+        + '&known=' + encodeURIComponent(this._getKnownXrefs());
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4) {
+            if (xhr.status === 200 && xhr.responseText) {
+                try {
+                    var newData = JSON.parse(xhr.responseText);
+                    if (newData.nodes && newData.nodes.length > 0) {
+                        nav._expansionHistory.push({ type: 'lazy', fid: fid, pid: pid });
+                        nav.mergeLazyData(lazyNodeId, newData);
+                    }
+                } catch (e) {
+                    console.error('SP Tree Explorer: replay lazy parse error', e);
+                }
+            }
+            callback();
+        }
+    };
+    xhr.send();
+};
+
+/**
+ * Find and expand an ancestor branch matching the given family/person xrefs.
+ */
+FamilyNavigator.prototype._replayAncestorExpand = function (fid, pid, lineIndex, callback) {
+    var nav = this;
+
+    // Find the node whose person xref matches pid
+    var childNodeId = null;
+    for (var id in this.nodeMap) {
+        var n = this.nodeMap[id];
+        if (n.person && n.person.xref === pid) {
+            childNodeId = id;
+            break;
+        }
+    }
+
+    if (!childNodeId) {
+        callback();
+        return;
+    }
+
+    // Check if already expanded for this line
+    var existingEdges = this.parentEdges[childNodeId] || [];
+    for (var i = 0; i < existingEdges.length; i++) {
+        if (existingEdges[i].lineIndex === lineIndex) {
+            this.activeLines[childNodeId] = lineIndex;
+            this.measureAndRender();
+            callback();
+            return;
+        }
+    }
+
+    var url = this.expandUrl
+        + '&instance=' + encodeURIComponent(this.cardPrefix)
+        + '&fid=' + encodeURIComponent(fid)
+        + '&pid=' + encodeURIComponent(pid)
+        + '&known=' + encodeURIComponent(this._getKnownXrefs());
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4) {
+            if (xhr.status === 200 && xhr.responseText) {
+                try {
+                    var newData = JSON.parse(xhr.responseText);
+                    if (newData.nodes && newData.nodes.length > 0) {
+                        nav._expansionHistory.push({ type: 'ancestor', fid: fid, pid: pid, lineIndex: lineIndex });
+                        nav._mergeAncestorData(childNodeId, newData, lineIndex);
+                    }
+                } catch (e) {
+                    console.error('SP Tree Explorer: replay ancestor parse error', e);
+                }
+            }
+            callback();
+        }
+    };
+    xhr.send();
 };
 
 // ==========================================================================

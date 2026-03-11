@@ -64,6 +64,13 @@ class SpTreeExplorerHandler extends AbstractModule implements RequestHandlerInte
         $renderer = new FamilyTreeRenderer($prefix, $moduleName, $tree, $rootXref);
         $renderer->restore();
 
+        // Pre-seed known xrefs so the server skips subtrees already in the browser
+        $knownRaw = Validator::queryParams($request)->string('known', '');
+        if ($knownRaw !== '') {
+            $knownXrefs = array_filter(explode(',', $knownRaw), static fn(string $v) => $v !== '');
+            $renderer->setKnownXrefs($knownXrefs);
+        }
+
         $json = $renderer->expandNode($targetId, $personId, $tree);
 
         return response($json, 200, ['Content-Type' => 'application/json']);

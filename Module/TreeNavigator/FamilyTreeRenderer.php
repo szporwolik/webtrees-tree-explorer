@@ -45,6 +45,9 @@ class FamilyTreeRenderer
     /** @var array<string, bool> Tracks visited xrefs to avoid cycles */
     private array $visited = [];
 
+    /** @var array<string, bool> Xrefs already rendered on the client (skip during expansion) */
+    private array $knownXrefs = [];
+
     /** @var array<string, array> Collected nodes keyed by unique id */
     private array $nodes = [];
 
@@ -129,6 +132,18 @@ class FamilyTreeRenderer
         $tName = $this->tree->name();
         $visited[$tName][$this->rootXref]['_nodeIdCounter_'] = $this->nodeIdCounter;
         Session::put('SPNav_visited', $visited);
+    }
+
+    /**
+     * Pre-seed the visited array with xrefs already known to the client.
+     * This prevents the server from re-building subtrees for people
+     * that are already rendered in the browser.
+     */
+    public function setKnownXrefs(array $xrefs): void
+    {
+        foreach ($xrefs as $xref) {
+            $this->knownXrefs[$xref] = true;
+        }
     }
 
     /**
@@ -365,9 +380,14 @@ class FamilyTreeRenderer
      */
     private function collectTree(Individual $person, int $depth, int $direction,
                                  ?Family $throughFamily, bool $isOrigin,
-                                 string $pathChildXref, int $descDepth = -1): string
+                                 string $pathChildXref): string
     {
         $xref = $person->xref();
+
+        // Skip people already rendered on the client (descendant direction only)
+        if ($direction <= 0 && isset($this->knownXrefs[$xref])) {
+            return '';
+        }
 
         // Capture birth date and original xref before any gender swap
         $childBirthJd = $person->getBirthDate()->julianDay();
@@ -632,7 +652,7 @@ class FamilyTreeRenderer
         // --- Children below ---
         if ($direction <= 0) {
             foreach ($familyObjects as $fi => $famObj) {
-                $this->collectChildren($person, $nodeId, $famObj, '', $descDepth, $fi);
+                $this->collectChildren($person, $nodeId, $famObj, '', $fi);
             }
         } elseif ($direction === 1) {
             // In ancestor direction: collect siblings from throughFamily,
@@ -834,11 +854,10 @@ class FamilyTreeRenderer
 
     /**
      * Collect children nodes below a parent.
-     * @param int $descDepth Maximum descendant depth remaining (-1 = unlimited)
      */
     private function collectChildren(Individual $person, string $parentNodeId,
                                      ?Family $throughFamily, string $excludeXref,
-                                     int $descDepth = -1, int $familyIndex = 0): void
+                                     int $familyIndex = 0): void
     {
         $allChildren = [];
         foreach ($person->spouseFamilies() as $family) {
@@ -864,43 +883,16 @@ class FamilyTreeRenderer
         });
 
         foreach ($allChildren as $child) {
-            if ($descDepth === 0) {
-                // Depth exhausted — create lazy placeholder
-                $childFam = $child->spouseFamilies()->first();
-                if ($childFam instanceof Family) {
-                    $lazyId = $this->nextNodeId();
-                    $this->nodes[$lazyId] = [
-                        'id'    => $lazyId,
-                        'type'  => 'lazy',
-                        'familyXref' => $childFam->xref(),
-                        'label' => '...',
-                        'direction' => 'down',
-                    ];
-                    $this->edges[] = [
-                        'from' => $parentNodeId,
-                        'to'   => $lazyId,
-                        'type' => 'parent-child',
-                        'familyIndex' => $familyIndex,
-                    ];
-                } else {
-                    $childNodeId = $this->collectTree($child, 0, -1, null, false, '');
-                    $this->edges[] = [
-                        'from' => $parentNodeId,
-                        'to'   => $childNodeId,
-                        'type' => 'parent-child',
-                        'familyIndex' => $familyIndex,
-                    ];
-                }
-            } else {
-                $nextDesc = $descDepth > 0 ? $descDepth - 1 : -1;
-                $childNodeId = $this->collectTree($child, 50, -1, null, false, '', $nextDesc);
-                $this->edges[] = [
-                    'from' => $parentNodeId,
-                    'to'   => $childNodeId,
-                    'type' => 'parent-child',
-                    'familyIndex' => $familyIndex,
-                ];
+            $childNodeId = $this->collectTree($child, 50, -1, null, false, '');
+            if ($childNodeId === '') {
+                continue;
             }
+            $this->edges[] = [
+                'from' => $parentNodeId,
+                'to'   => $childNodeId,
+                'type' => 'parent-child',
+                'familyIndex' => $familyIndex,
+            ];
         }
     }
 
@@ -928,7 +920,10 @@ class FamilyTreeRenderer
         });
 
         foreach ($siblings as $child) {
-            $siblingNodeId = $this->collectTree($child, 2, -1, null, false, '', 2);
+            $siblingNodeId = $this->collectTree($child, 0, -1, null, false, '');
+            if ($siblingNodeId === '') {
+                continue;
+            }
             $this->edges[] = [
                 'from' => $parentNodeId,
                 'to'   => $siblingNodeId,
