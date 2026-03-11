@@ -287,9 +287,9 @@ class FamilyTreeRenderer
             // No image available
         }
 
-        $sourceCount = $person->facts(['SOUR'])->count();
-        $noteCount   = $person->facts(['NOTE'])->count();
-        $mediaCount  = $person->facts(['OBJE'])->count();
+        $sourceCount = $this->countAllTags($person->gedcom(), 'SOUR');
+        $noteCount   = $this->countAllTags($person->gedcom(), 'NOTE');
+        $mediaCount  = $this->countAllTags($person->gedcom(), 'OBJE');
 
         return [
             'xref'     => $person->xref(),
@@ -588,9 +588,9 @@ class FamilyTreeRenderer
                 }
             }
 
-            $familySourceCount = $spouseFamily->facts(['SOUR'])->count();
-            $familyNoteCount   = $spouseFamily->facts(['NOTE'])->count();
-            $familyMediaCount  = $spouseFamily->facts(['OBJE'])->count();
+            $familySourceCount = $this->countAllTags($spouseFamily->gedcom(), 'SOUR');
+            $familyNoteCount   = $this->countAllTags($spouseFamily->gedcom(), 'NOTE');
+            $familyMediaCount  = $this->countAllTags($spouseFamily->gedcom(), 'OBJE');
 
             // Death date JDs for duration fallback
             $personDeathJd = $person->getDeathDate()->isOK() ? $person->getDeathDate()->julianDay() : 0;
@@ -1078,8 +1078,17 @@ class FamilyTreeRenderer
     }
 
     /**
-     * Count level-1 GEDCOM tags in one record.
+     * Count occurrences of a GEDCOM tag at any level within a record.
      */
+    private function countAllTags(string $gedcom, string $tag): int
+    {
+        if ($gedcom === '') {
+            return 0;
+        }
+
+        return preg_match_all('/\n\d+\s+' . preg_quote($tag, '/') . '\b/', $gedcom);
+    }
+
     /**
      * Find first valid marriage date (Julian day) in a family.
      */
