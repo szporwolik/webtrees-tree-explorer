@@ -71,7 +71,8 @@ class SpTreeExplorerHandler extends AbstractModule implements RequestHandlerInte
             $renderer->setKnownXrefs($knownXrefs);
         }
 
-        $json = $renderer->expandNode($targetId, $personId, $tree);
+        $generation = Validator::queryParams($request)->integer('gen', 0);
+        $json = $renderer->expandNode($targetId, $personId, $tree, $generation);
 
         return response($json, 200, ['Content-Type' => 'application/json']);
     }

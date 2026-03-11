@@ -2144,10 +2144,14 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
         }
     }
 
+    var childNode = this.nodeMap[childNodeId];
+    var childGen = (childNode && childNode.generation !== undefined) ? childNode.generation : 0;
+
     var url = this.expandUrl
         + '&instance=' + encodeURIComponent(this.cardPrefix)
         + '&fid=' + encodeURIComponent(familyXref)
         + '&pid=' + encodeURIComponent(childXref)
+        + '&gen=' + encodeURIComponent(childGen + 1)
         + '&known=' + encodeURIComponent(this._getKnownXrefs());
 
     this.showLoader(true);
@@ -2284,11 +2288,13 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
 
     var fid = node.familyXref;
     var pid = node.childXref || node.familyXref;
+    var lazyGen = (node.generation !== undefined) ? node.generation : 0;
 
     var url = this.expandUrl
         + '&instance=' + encodeURIComponent(this.cardPrefix)
         + '&fid=' + encodeURIComponent(fid)
         + '&pid=' + encodeURIComponent(pid)
+        + '&gen=' + encodeURIComponent(lazyGen)
         + '&known=' + encodeURIComponent(this._getKnownXrefs());
 
     this.showLoader(true);
@@ -3184,10 +3190,14 @@ FamilyNavigator.prototype._replayLazyExpand = function (fid, pid, callback) {
         return;
     }
 
+    var lazyNode = this.nodeMap[lazyNodeId];
+    var lazyGen = (lazyNode && lazyNode.generation !== undefined) ? lazyNode.generation : 0;
+
     var url = this.expandUrl
         + '&instance=' + encodeURIComponent(this.cardPrefix)
         + '&fid=' + encodeURIComponent(fid)
         + '&pid=' + encodeURIComponent(pid)
+        + '&gen=' + encodeURIComponent(lazyGen)
         + '&known=' + encodeURIComponent(this._getKnownXrefs());
 
     var xhr = new XMLHttpRequest();
@@ -3243,10 +3253,14 @@ FamilyNavigator.prototype._replayAncestorExpand = function (fid, pid, lineIndex,
         }
     }
 
+    var childNode = this.nodeMap[childNodeId];
+    var childGen = (childNode && childNode.generation !== undefined) ? childNode.generation : 0;
+
     var url = this.expandUrl
         + '&instance=' + encodeURIComponent(this.cardPrefix)
         + '&fid=' + encodeURIComponent(fid)
         + '&pid=' + encodeURIComponent(pid)
+        + '&gen=' + encodeURIComponent(childGen + 1)
         + '&known=' + encodeURIComponent(this._getKnownXrefs());
 
     var xhr = new XMLHttpRequest();
