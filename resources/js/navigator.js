@@ -2766,9 +2766,7 @@ FamilyNavigator.prototype.initToolbar = function () {
     var btnHome = document.getElementById(prefix + '_btnHome');
     if (btnHome) {
         btnHome.addEventListener('click', function () {
-            if (nav.baseXref) {
-                nav.navigateTo(nav.baseXref);
-            }
+            nav.focusOrigin();
         });
     }
 
