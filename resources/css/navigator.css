@@ -613,7 +613,7 @@
     position: relative;
     background: var(--wtp-chip-bg);
     border: 1px solid var(--wtp-chip-border);
-    border-radius: calc(var(--sp-radius) - 2px);
+    border-radius: 4px;
     padding: 4px 10px;
     backdrop-filter: blur(4px);
     transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
