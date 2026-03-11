@@ -1448,7 +1448,7 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
 
         var brokenRings = document.createElement('span');
         brokenRings.className = 'sp-couple-rings sp-rings-broken';
-        brokenRings.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.ringBrokenFill + '" fill-opacity="0.45" stroke="' + wtpCSSColors.ringBrokenStroke + '" stroke-width="1.8"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.ringBrokenFill + '" fill-opacity="0.45" stroke="' + wtpCSSColors.ringBrokenStroke + '" stroke-width="1.8"/><line x1="4" y1="2" x2="20" y2="12" stroke="' + wtpCSSColors.divorceLine + '" stroke-width="1.7"/></svg>';
+        brokenRings.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.ringFemaleFill + '" fill-opacity="0.35" stroke="' + wtpCSSColors.ringFemaleStroke + '" stroke-width="1.8" opacity="0.55"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.ringMaleFill + '" fill-opacity="0.35" stroke="' + wtpCSSColors.ringMaleStroke + '" stroke-width="1.8" opacity="0.55"/><line x1="4" y1="2" x2="20" y2="12" stroke="' + wtpCSSColors.divorceLine + '" stroke-width="1.7"/></svg>';
         lineEl.appendChild(brokenRings);
 
         {
@@ -1505,10 +1505,10 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
             }
         }
     } else {
-        // Unmarried couple — linked circles (partnership)
+        // Unmarried couple — dashed gender-colored circles (partnership)
         var heart = document.createElement('span');
         heart.className = 'sp-couple-rings';
-        heart.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.heartFill + '" fill-opacity="0.4" stroke="' + wtpCSSColors.heartStroke + '" stroke-width="1.6" stroke-dasharray="3 2"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.heartFill + '" fill-opacity="0.4" stroke="' + wtpCSSColors.heartStroke + '" stroke-width="1.6" stroke-dasharray="3 2"/></svg>';
+        heart.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.ringFemaleFill + '" fill-opacity="0.55" stroke="' + wtpCSSColors.ringFemaleStroke + '" stroke-width="1.6" stroke-dasharray="3 2"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.ringMaleFill + '" fill-opacity="0.55" stroke="' + wtpCSSColors.ringMaleStroke + '" stroke-width="1.6" stroke-dasharray="3 2"/></svg>';
         lineEl.appendChild(heart);
         {
             var hasExtras = familyData.durationLabel || famSourceCount > 0 || famNoteCount > 0 || famMediaCount > 0;
