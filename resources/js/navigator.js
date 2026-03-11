@@ -147,6 +147,9 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     // Expansion history — records each AJAX expansion for share-link replay
     this._expansionHistory = []; // [{type:'lazy'|'ancestor', fid, pid, dir?, lineIndex?}]
 
+    // Debug mode — append ?debug=1 to URL to enable console logging
+    this.debug = (new URL(window.location.href).searchParams.get('debug') === '1');
+
     // Sources visibility state (read from data attribute, default: off)
     var defaultSources = this.container ? this.container.getAttribute('data-default-sources') : '0';
     this.showSources = defaultSources === '1';
@@ -257,6 +260,16 @@ FamilyNavigator.prototype._syncIconOverlayBounds = function () {
 // INDEX BUILDING — build adjacency maps from flat node/edge arrays
 // ==========================================================================
 
+/**
+ * Debug log — only prints when ?debug=1 is in the URL.
+ */
+FamilyNavigator.prototype._dbg = function () {
+    if (!this.debug) return;
+    var args = ['[SPTree]'];
+    for (var i = 0; i < arguments.length; i++) args.push(arguments[i]);
+    console.log.apply(console, args);
+};
+
 FamilyNavigator.prototype.buildIndex = function (data) {
     var i, node, edge;
     this.nodeMap = {};
@@ -310,6 +323,8 @@ FamilyNavigator.prototype.buildIndex = function (data) {
             return ja - jb;
         });
     }
+
+    this._dbg('buildIndex', 'nodes=' + data.nodes.length, 'edges=' + data.edges.length, 'rootId=' + data.rootId);
 };
 
 /**
@@ -685,6 +700,116 @@ FamilyNavigator.prototype.layoutTree = function () {
     this.measureSubtree(visualRoot);
     this.positionSubtree(visualRoot, 0, 0);
 
+    // Position orphaned ancestors — nodes added by in-place ancestor expansion
+    // on side branches that are not reachable from the visual root's downward walk.
+    // Each iteration positions one orphan; the loop cascades upward through chains.
+    for (var oIter = 0; oIter < 50; oIter++) {
+        var orphanId = null;
+        var orphanChildId = null;
+        var orphanEdge = null;
+        for (var nid in this.nodeMap) {
+            var ol = this.layoutMap[nid];
+            if (ol && ol.x !== undefined) continue; // already positioned
+            var vc = this.getVisibleChildren(nid);
+            for (var ci = 0; ci < vc.length; ci++) {
+                var cl = this.layoutMap[vc[ci]];
+                if (cl && cl.x !== undefined) {
+                    orphanId = nid;
+                    orphanChildId = vc[ci];
+                    orphanEdge = this.edgeMap[nid + '->' + vc[ci]] || null;
+                    break;
+                }
+            }
+            if (orphanId) break;
+        }
+        if (!orphanId) break;
+
+        var nW = this.nodeWidth(orphanId);
+        var cLayout = this.layoutMap[orphanChildId];
+
+        // Determine X target: align above the specific card (person or spouse)
+        // based on the connecting edge's lineIndex.
+        var targetCenterX = cLayout.centerX;
+        if (orphanEdge && orphanEdge.lineIndex !== undefined) {
+            var childNode = this.nodeMap[orphanChildId];
+            if (childNode && childNode.families && childNode.families.length > 0) {
+                if (orphanEdge.lineIndex === 0) {
+                    // Person side → center above left (person) card
+                    targetCenterX = cLayout.x + this.CARD_W / 2;
+                } else {
+                    // Spouse side → center above right (first spouse) card
+                    targetCenterX = cLayout.x + this.CARD_W + this.COUPLE_GAP + this.CARD_W / 2;
+                }
+            }
+        }
+
+        // Calculate target Y level
+        var targetY = cLayout.y - this.nodeHeight(orphanId) - this.V_GAP;
+
+        // Collision avoidance: collect all nodes at the same Y level and check overlap
+        var sameLevelNodes = [];
+        for (var oid in this.layoutMap) {
+            if (oid === orphanId) continue;
+            var ol = this.layoutMap[oid];
+            if (!ol || ol.x === undefined) continue;
+            if (Math.abs(ol.y - targetY) > 5) continue;
+            sameLevelNodes.push(ol);
+        }
+        var oLeft = targetCenterX - nW / 2;
+        var oRight = oLeft + nW;
+        var hasOverlap = false;
+        for (var si = 0; si < sameLevelNodes.length; si++) {
+            var sl = sameLevelNodes[si];
+            if (oLeft < sl.x + sl.w + this.H_GAP && oRight > sl.x - this.H_GAP) {
+                hasOverlap = true;
+                break;
+            }
+        }
+        if (hasOverlap) {
+            if (!orphanEdge || orphanEdge.lineIndex === 0) {
+                // Person/left side — place to the left of all nodes at this Y
+                var leftMost = Infinity;
+                for (var si = 0; si < sameLevelNodes.length; si++) {
+                    if (sameLevelNodes[si].x < leftMost) leftMost = sameLevelNodes[si].x;
+                }
+                targetCenterX = leftMost - this.H_GAP - nW / 2;
+            } else {
+                // Spouse/right side — place to the right of all nodes at this Y
+                var rightMost = -Infinity;
+                for (var si = 0; si < sameLevelNodes.length; si++) {
+                    var rr = sameLevelNodes[si].x + sameLevelNodes[si].w;
+                    if (rr > rightMost) rightMost = rr;
+                }
+                targetCenterX = rightMost + this.H_GAP + nW / 2;
+            }
+        }
+
+        // Log existing parents of the child for overlap diagnosis
+        var childPEdges = this.parentEdges[orphanChildId] || [];
+        var parentInfo = childPEdges.map(function(pe) {
+            var pl = this.layoutMap[pe.from];
+            return pe.from + '(line=' + pe.lineIndex + ',x=' + (pl && pl.x !== undefined ? Math.round(pl.x) : '?') + ')';
+        }.bind(this)).join(' ');
+        this._dbg('layoutOrphan', orphanId, '→child=' + orphanChildId,
+            'line=' + (orphanEdge ? orphanEdge.lineIndex : 'none'),
+            'targetX=' + Math.round(targetCenterX),
+            'childX=' + Math.round(cLayout.x), 'childCX=' + Math.round(cLayout.centerX),
+            'overlap=' + hasOverlap, 'sameLevel=' + sameLevelNodes.length,
+            'parents=[' + parentInfo + ']');
+
+        // Directly position the orphan node above its positioned child.
+        // Do NOT call positionSubtree — it would recurse and reposition
+        // already-laid-out children, breaking the main layout.
+        this.layoutMap[orphanId] = {
+            w: nW,
+            subtreeW: nW,
+            x: targetCenterX - nW / 2,
+            y: targetY,
+            h: this.nodeHeight(orphanId),
+            centerX: targetCenterX
+        };
+    }
+
     // Normalize: shift everything so min x/y = padding
     var padding = 40;
     var minX = Infinity, minY = Infinity;
@@ -904,6 +1029,16 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
             }
         }
     }
+
+    this._dbg('ancestorIcons', node.id,
+        'person=' + (node.person ? node.person.xref : '?'),
+        'pHasParents=' + personHasParents, 'pVis=' + personAncestorsVisible,
+        'sVis=' + spouseAncestorsVisible,
+        'oxref=' + node.originalChildXref,
+        'spouse0=' + (node.families && node.families.length > 0 && node.families[0].spouse ? node.families[0].spouse.xref : 'none'),
+        'edges=' + parentEdgesHere.length,
+        'gen=' + node.generation,
+        'swap=' + (node.genderSwapped || false));
 
     // Store ancestor-icon metadata on the wrapper for overlay rendering
     wrapper._ancestorIcons = [];
@@ -1177,6 +1312,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         (function(xref) {
             rebaseBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
+                nav._dbg('CLICK cardRebase', xref);
                 nav.navigateTo(xref);
             });
         })(personData.xref);
@@ -1419,6 +1555,7 @@ FamilyNavigator.prototype.createAncestorTreeIcon = function (nodeId, lineIndex) 
         + '</svg>';
     btn.addEventListener('click', function (e) {
         e.stopPropagation();
+        nav._dbg('CLICK switchLine', nodeId, 'line=' + lineIndex);
         nav.switchAncestorLine(nodeId, lineIndex);
     });
     return btn;
@@ -1484,6 +1621,7 @@ FamilyNavigator.prototype._renderIconOverlay = function (canvasW, canvasH) {
                 (function(iconInfo) {
                     btn.addEventListener('click', function (e) {
                         e.stopPropagation();
+                        nav._dbg('CLICK rebaseIcon', iconInfo.xref);
                         nav.navigateTo(iconInfo.xref);
                     });
                 })(info);
@@ -1502,8 +1640,10 @@ FamilyNavigator.prototype._renderIconOverlay = function (canvasW, canvasH) {
                     btn.addEventListener('click', function (e) {
                         e.stopPropagation();
                         if (iconInfo.familyXref) {
+                            nav._dbg('CLICK expandAncestor', nodeId, 'fam=' + iconInfo.familyXref, 'child=' + iconInfo.childXref, 'line=' + iconInfo.lineIndex);
                             nav.expandAncestorInPlace(nodeId, iconInfo.familyXref, iconInfo.childXref, iconInfo.lineIndex);
                         } else {
+                            nav._dbg('CLICK navigateTo', iconInfo.xref, 'from=' + nodeId);
                             nav.navigateTo(iconInfo.xref);
                         }
                     });
@@ -1564,6 +1704,7 @@ FamilyNavigator.prototype.createLazyElement = function (node, layout) {
 
     var nav = this;
     el.addEventListener('click', function () {
+        nav._dbg('CLICK expandLazy', node.id, 'fam=' + node.familyXref);
         nav.expandLazyNode(node.id);
     });
 
@@ -2149,6 +2290,7 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
 // ==========================================================================
 
 FamilyNavigator.prototype.switchAncestorLine = function (nodeId, lineIndex) {
+    this._dbg('switchAncestorLine', nodeId, 'line=' + lineIndex);
     this.activeLines[nodeId] = lineIndex;
     this.measureAndRender();
     this.focusNode(nodeId);
@@ -2190,10 +2332,13 @@ FamilyNavigator.prototype.expandAncestors = function (nodeId, ancestorLine) {
 FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyXref, childXref, lineIndex) {
     var nav = this;
 
+    this._dbg('expandAncestorInPlace', childNodeId, 'fam=' + familyXref, 'child=' + childXref, 'line=' + lineIndex);
+
     // If ancestors for this line are already loaded (but hidden), just switch to them
     var existingEdges = this.parentEdges[childNodeId] || [];
     for (var i = 0; i < existingEdges.length; i++) {
         if (existingEdges[i].lineIndex === lineIndex) {
+            this._dbg('expandAncestorInPlace → already loaded, switching line');
             this.activeLines[childNodeId] = lineIndex;
             this.measureAndRender();
             this.focusNode(childNodeId);
@@ -2222,6 +2367,7 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
                 try {
                     var newData = JSON.parse(xhr.responseText);
                     if (newData.nodes && newData.nodes.length > 0) {
+                        nav._dbg('expandAncestorInPlace → received', newData.nodes.length, 'nodes, rootId=' + newData.rootId);
                         nav._expansionHistory.push({ type: 'ancestor', fid: familyXref, pid: childXref, lineIndex: lineIndex });
                         nav._mergeAncestorData(childNodeId, newData, lineIndex);
                     }
@@ -2239,6 +2385,9 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
  * the new subtree root to the given child node.
  */
 FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, lineIndex) {
+    this._dbg('_mergeAncestorData', childNodeId, 'rootId=' + newData.rootId, 'line=' + lineIndex,
+        'nodes=' + newData.nodes.length, 'edges=' + (newData.edges ? newData.edges.length : 0),
+        'parentEdgesBefore=' + (this.parentEdges[childNodeId] ? this.parentEdges[childNodeId].length : 0));
     // Add new nodes
     for (var i = 0; i < newData.nodes.length; i++) {
         var n = newData.nodes[i];
@@ -2246,20 +2395,22 @@ FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, l
     }
 
     // Add new edges
-    for (var i = 0; i < newData.edges.length; i++) {
-        var edge = newData.edges[i];
-        var key = edge.from + '->' + edge.to;
-        this.edgeMap[key] = edge;
+    if (newData.edges) {
+        for (var i = 0; i < newData.edges.length; i++) {
+            var edge = newData.edges[i];
+            var key = edge.from + '->' + edge.to;
+            this.edgeMap[key] = edge;
 
-        if (!this.childrenMap[edge.from]) {
-            this.childrenMap[edge.from] = [];
-        }
-        this.childrenMap[edge.from].push(edge.to);
+            if (!this.childrenMap[edge.from]) {
+                this.childrenMap[edge.from] = [];
+            }
+            this.childrenMap[edge.from].push(edge.to);
 
-        if (!this.parentEdges[edge.to]) {
-            this.parentEdges[edge.to] = [];
+            if (!this.parentEdges[edge.to]) {
+                this.parentEdges[edge.to] = [];
+            }
+            this.parentEdges[edge.to].push(edge);
         }
-        this.parentEdges[edge.to].push(edge);
     }
 
     // Connect the new subtree root to the existing child node
@@ -2279,12 +2430,35 @@ FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, l
 
         if (!this.parentEdges[childNodeId]) this.parentEdges[childNodeId] = [];
         this.parentEdges[childNodeId].push(connectEdge);
+
+        this._dbg('_mergeAncestorData connect', connectKey,
+            'parentEdgesAfter=' + this.parentEdges[childNodeId].length);
+
+        // Mark that this child now has multiple ancestor lines
+        var childNode = this.nodeMap[childNodeId];
+        if (childNode) {
+            var lineIndices = {};
+            var pe = this.parentEdges[childNodeId];
+            for (var ei = 0; ei < pe.length; ei++) {
+                if (pe[ei].lineIndex !== undefined) lineIndices[pe[ei].lineIndex] = true;
+            }
+            if (Object.keys(lineIndices).length > 1) {
+                childNode.hasMultipleAncestorLines = true;
+            }
+        }
     }
 
     // Switch to the newly expanded ancestor line so it becomes visible
     if (lineIndex > 0) {
         this.activeLines[childNodeId] = lineIndex;
     }
+
+    // Dump structure for debugging
+    this._dbg('STRUCTURE after merge', 'child=' + childNodeId, JSON.stringify({
+        child: (function(n) { return { id: n.id, person: n.person.xref, swap: n.genderSwapped, gen: n.generation, oxref: n.originalChildXref, families: n.families ? n.families.length : 0 }; })(this.nodeMap[childNodeId]),
+        parentEdges: (this.parentEdges[childNodeId] || []).map(function(e) { return { from: e.from, line: e.lineIndex, type: e.line }; }),
+        childrenOf: Object.keys(this.childrenMap).filter(function(k) { return this.childrenMap[k].indexOf(childNodeId) >= 0; }.bind(this)).map(function(k) { var n = this.nodeMap[k]; return { id: k, person: n ? n.person.xref : '?', hasFam: n && n.families ? n.families.length : 0 }; }.bind(this))
+    }));
 
     // Re-measure and re-render, then scroll to the expanded area
     this.measureAndRender();
@@ -2297,6 +2471,7 @@ FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, l
  */
 FamilyNavigator.prototype.navigateTo = function (xref) {
     var nav = this;
+    this._dbg('navigateTo', xref);
 
     var url = this.expandUrl
         .replace('action=NodeExpand', 'action=NavigateTo')
@@ -2315,6 +2490,7 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
                     var newData = JSON.parse(xhr.responseText);
                     if (newData.nodes && newData.nodes.length > 0) {
                         // Replace the entire tree
+                        nav._dbg('navigateTo → received', newData.nodes.length, 'nodes, rootId=' + newData.rootId);
                         nav.treeData = newData;
                         nav.activeLines = {};
                         nav._expansionHistory = [];
@@ -2354,6 +2530,8 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
     var fid = node.familyXref;
     var pid = direction === 'down' ? (node.personXref || '') : (node.childXref || node.familyXref);
     var lazyGen = (node.generation !== undefined) ? node.generation : 0;
+
+    this._dbg('expandLazyNode', lazyNodeId, 'dir=' + direction, 'fid=' + fid, 'pid=' + pid, 'gen=' + lazyGen);
 
     var url = this.expandUrl
         + '&instance=' + encodeURIComponent(this.cardPrefix)
@@ -2407,6 +2585,8 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
 FamilyNavigator.prototype.mergeLazyData = function (lazyNodeId, newData) {
     var lazyNode = this.nodeMap[lazyNodeId];
     var direction = (lazyNode && lazyNode.direction) || 'up';
+
+    this._dbg('mergeLazyData', lazyNodeId, 'dir=' + direction, 'nodes=' + (newData.nodes ? newData.nodes.length : 0), 'rootId=' + newData.rootId);
 
     if (direction === 'down') {
         // ---- Descendant expansion ----

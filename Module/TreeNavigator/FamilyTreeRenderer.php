@@ -648,6 +648,7 @@ class FamilyTreeRenderer
             'ancestorLines' => $ancestorLines,
             'activeAncestorLine' => 0,
             'personHasParents' => $personHasParents,
+            'genderSwapped' => $genderSwapped,
             'childBirthJd' => $childBirthJd,
             'originalChildXref' => $originalChildXref,
         ];
