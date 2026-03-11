@@ -1480,7 +1480,7 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
         // Married layout: rings + date chip with duration & icons
         var rings = document.createElement('span');
         rings.className = 'sp-couple-rings';
-        rings.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.ringFemaleFill + '" fill-opacity="0.55" stroke="' + wtpCSSColors.ringFemaleStroke + '" stroke-width="1.8"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.ringMaleFill + '" fill-opacity="0.55" stroke="' + wtpCSSColors.ringMaleStroke + '" stroke-width="1.8"/></svg>';
+        rings.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.ringFemaleFill + '" fill-opacity="0.75" stroke="' + wtpCSSColors.ringFemaleStroke + '" stroke-width="1.8"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.ringMaleFill + '" fill-opacity="0.75" stroke="' + wtpCSSColors.ringMaleStroke + '" stroke-width="1.8"/></svg>';
         lineEl.appendChild(rings);
         {
             var hasChipContent = familyData.marriageDate || familyData.durationLabel || famSourceCount > 0 || famNoteCount > 0 || famMediaCount > 0;
@@ -1505,10 +1505,10 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
             }
         }
     } else {
-        // Unmarried couple — heart icon, no rings
+        // Unmarried couple — linked circles (partnership)
         var heart = document.createElement('span');
         heart.className = 'sp-couple-rings';
-        heart.innerHTML = '<svg viewBox="0 0 20 18" width="48" height="42"><path d="M10 17s-7-4.35-7-10A4 4 0 0 1 10 4a4 4 0 0 1 7 3c0 5.65-7 10-7 10z" fill="' + wtpCSSColors.heartFill + '" fill-opacity="0.72" stroke="' + wtpCSSColors.heartStroke + '" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+        heart.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.heartFill + '" fill-opacity="0.4" stroke="' + wtpCSSColors.heartStroke + '" stroke-width="1.6" stroke-dasharray="3 2"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.heartFill + '" fill-opacity="0.4" stroke="' + wtpCSSColors.heartStroke + '" stroke-width="1.6" stroke-dasharray="3 2"/></svg>';
         lineEl.appendChild(heart);
         {
             var hasExtras = familyData.durationLabel || famSourceCount > 0 || famNoteCount > 0 || famMediaCount > 0;
