@@ -457,7 +457,10 @@ FamilyNavigator.prototype.measureSubtree = function (nodeId, _visited) {
     _visited[nodeId] = true;
 
     var node = this.nodeMap[nodeId];
-    if (!node) return 0;
+    if (!node) {
+        this.layoutMap[nodeId] = { w: 0, subtreeW: 0 };
+        return 0;
+    }
 
     var nodeW = this.nodeWidth(nodeId);
     var children = this.getVisibleChildren(nodeId);
@@ -603,6 +606,14 @@ FamilyNavigator.prototype.positionSubtree = function (nodeId, x, y, _visited) {
 
     // Position children below
     var children = this.getVisibleChildren(nodeId);
+    if (children.length === 0) return;
+
+    // Filter out children whose layout was not computed (missing nodeMap entry)
+    var measuredChildren = [];
+    for (var i = 0; i < children.length; i++) {
+        if (this.layoutMap[children[i]]) measuredChildren.push(children[i]);
+    }
+    children = measuredChildren;
     if (children.length === 0) return;
 
     var childrenTotalW = 0;
@@ -2298,22 +2309,11 @@ FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, l
         this.nodeMap[n.id] = n;
     }
 
-    // Add new edges
+    // Add new edges to edgeMap
     if (newData.edges) {
         for (var i = 0; i < newData.edges.length; i++) {
             var edge = newData.edges[i];
-            var key = edge.from + '->' + edge.to;
-            this.edgeMap[key] = edge;
-
-            if (!this.childrenMap[edge.from]) {
-                this.childrenMap[edge.from] = [];
-            }
-            this.childrenMap[edge.from].push(edge.to);
-
-            if (!this.parentEdges[edge.to]) {
-                this.parentEdges[edge.to] = [];
-            }
-            this.parentEdges[edge.to].push(edge);
+            this.edgeMap[edge.from + '->' + edge.to] = edge;
         }
     }
 
@@ -2329,20 +2329,20 @@ FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, l
         var connectKey = newData.rootId + '->' + childNodeId;
         this.edgeMap[connectKey] = connectEdge;
 
-        if (!this.childrenMap[newData.rootId]) this.childrenMap[newData.rootId] = [];
-        this.childrenMap[newData.rootId].push(childNodeId);
+        this._dbg('_mergeAncestorData connect', connectKey);
+    }
 
-        if (!this.parentEdges[childNodeId]) this.parentEdges[childNodeId] = [];
-        this.parentEdges[childNodeId].push(connectEdge);
+    // Full rebuild of childrenMap / parentEdges from edgeMap (with sorting)
+    // to guarantee consistent state — avoids duplicate entries from
+    // successive ancestor expansions.
+    this._rebuildRelationships();
 
-        this._dbg('_mergeAncestorData connect', connectKey,
-            'parentEdgesAfter=' + this.parentEdges[childNodeId].length);
-
-        // Mark that this child now has multiple ancestor lines
+    // Mark that this child now has multiple ancestor lines
+    if (newData.rootId) {
         var childNode = this.nodeMap[childNodeId];
         if (childNode) {
             var lineIndices = {};
-            var pe = this.parentEdges[childNodeId];
+            var pe = this.parentEdges[childNodeId] || [];
             for (var ei = 0; ei < pe.length; ei++) {
                 if (pe[ei].lineIndex !== undefined) lineIndices[pe[ei].lineIndex] = true;
             }
@@ -2350,6 +2350,10 @@ FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, l
                 childNode.hasMultipleAncestorLines = true;
             }
         }
+
+        this._dbg('_mergeAncestorData connect',
+            newData.rootId + '->' + childNodeId,
+            'parentEdgesAfter=' + (this.parentEdges[childNodeId] ? this.parentEdges[childNodeId].length : 0));
     }
 
     // Switch to the newly expanded ancestor line so it becomes visible
