@@ -288,7 +288,7 @@ class FamilyTreeRenderer
             $parentFamily = $this->bestParentFamily($person);
             if ($parentFamily instanceof Family) {
                 $father = $parentFamily->husband();
-                if ($father instanceof Individual && $father->getBirthDate()->isOK()) {
+                if ($father instanceof Individual && $father->canShow($accessLevel) && $father->getBirthDate()->isOK()) {
                     $fatherAge = new Age($father->getBirthDate(), $birthDate);
                     if ($fatherAge->ageYears() >= 0) {
                         $fatherAgeAtBirth = $fatherAge->ageYears();
@@ -296,7 +296,7 @@ class FamilyTreeRenderer
                 }
 
                 $mother = $parentFamily->wife();
-                if ($mother instanceof Individual && $mother->getBirthDate()->isOK()) {
+                if ($mother instanceof Individual && $mother->canShow($accessLevel) && $mother->getBirthDate()->isOK()) {
                     $motherAge = new Age($mother->getBirthDate(), $birthDate);
                     if ($motherAge->ageYears() >= 0) {
                         $motherAgeAtBirth = $motherAge->ageYears();
