@@ -39,7 +39,6 @@ class FamilyTreeRenderer
     private string $moduleVersion;
     private Tree $tree;
     private string $rootXref;
-    private int $nodeSeq;
     private string $jsHandle = 'spNav';
 
     /** @var array<string, bool> Tracks visited xrefs to avoid cycles */
@@ -79,7 +78,6 @@ class FamilyTreeRenderer
         $this->moduleVersion = $moduleVersion;
         $this->tree       = $tree;
         $this->rootXref   = $rootXref;
-        $this->nodeSeq    = 0;
     }
 
     public function setDefaults(bool $details, bool $advancedControls, bool $sources = false): void
@@ -108,7 +106,6 @@ class FamilyTreeRenderer
     {
         $visited = Session::get('SPNav_visited', []);
         $tName = $this->tree->name();
-        $this->nodeSeq = (int) ($visited[$tName][$this->rootXref]['_seq_'] ?? 0);
         $this->nodeIdCounter = (int) ($visited[$tName][$this->rootXref]['_nodeIdCounter_'] ?? 0);
     }
 
@@ -120,7 +117,6 @@ class FamilyTreeRenderer
 
         $count = $visited[$tName][$root][$xref] ?? -1;
         $visited[$tName][$root][$xref] = $count + 1;
-        $visited[$tName][$root]['_seq_'] = $this->nodeSeq;
         $visited[$tName][$root]['_nodeIdCounter_'] = $this->nodeIdCounter;
         Session::put('SPNav_visited', $visited);
 
@@ -299,7 +295,6 @@ class FamilyTreeRenderer
         return [
             'xref'     => $person->xref(),
             'name'     => strip_tags($person->fullName()),
-            'nameHtml' => $person->fullName(),
             'years'    => strip_tags($person->lifespan()),
             'dateLine' => $dateLine,
             'dateLineQuality' => $this->mergeDateQuality($birthMeta['quality'], $deathMeta['quality']),
@@ -331,7 +326,6 @@ class FamilyTreeRenderer
         return [
             'xref'        => null,
             'name'        => '?',
-            'nameHtml'    => '?',
             'years'       => '',
             'dateLine'    => '',
             'dateLineQuality' => 'unknown',
@@ -724,13 +718,24 @@ class FamilyTreeRenderer
                         'families'  => [[
                             'spouse'       => $this->buildUnknownPersonData('F'),
                             'marriageDate' => '',
+                            'marriagePlace' => '',
+                            'marriageQuality' => '',
                             'married'      => false,
                             'divorced'     => false,
                             'divorceDate'  => '',
+                            'divorcePlace' => '',
+                            'divorceQuality' => '',
+                            'durationLabel' => '',
+                            'hasNextRelationship' => false,
+                            'familySourceCount' => 0,
+                            'familyNoteCount' => 0,
+                            'familyMediaCount' => 0,
                             'familyUrl'    => '',
                             'familyXref'   => $parentFamily->xref(),
                             'spouseHasParents' => false,
                             'spouseParentFamilyXref' => '',
+                            'husbandAgeAtMarriage' => null,
+                            'wifeAgeAtMarriage' => null,
                         ]],
                         'isOrigin'  => false,
                         'direction' => 1,

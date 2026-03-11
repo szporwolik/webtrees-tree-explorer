@@ -832,75 +832,6 @@ FamilyNavigator.prototype.layoutTree = function () {
     }
 };
 
-/**
- * Shift ancestor spines so that father's ancestors lean left
- * (above the left/person card) and mother's ancestors lean right
- * (above the right/spouse card).
- */
-FamilyNavigator.prototype._adjustAncestorDirection = function () {
-    for (var id in this.nodeMap) {
-        var node = this.nodeMap[id];
-        if (!node || !node.hasMultipleAncestorLines || !node.families || node.families.length === 0) continue;
-
-        var activeLine = this.activeLines[id] || 0;
-        var layout = this.layoutMap[id];
-        if (!layout || layout.x === undefined) continue;
-
-        // Target card center — where the connector should point
-        var targetX;
-        if (activeLine === 0) {
-            // Father's line → left (person) card center
-            targetX = layout.x + this.CARD_W / 2;
-        } else {
-            // Mother's line → right (first spouse) card center
-            // Use DOM measurement for accurate position
-            var wrapper = this.cardElements[id];
-            if (wrapper) {
-                var lines = wrapper.querySelectorAll('.sp-couple-line');
-                if (lines.length > 0 && lines[0].nextElementSibling) {
-                    var sCard = lines[0].nextElementSibling;
-                    targetX = layout.x + sCard.offsetLeft + sCard.offsetWidth / 2;
-                } else {
-                    targetX = layout.x + this.CARD_W + this.COUPLE_GAP + this.CARD_W / 2;
-                }
-            } else {
-                targetX = layout.x + this.CARD_W + this.COUPLE_GAP + this.CARD_W / 2;
-            }
-        }
-
-        // Walk up ancestor spine collecting all ancestor IDs
-        var spineIds = [];
-        var current = id;
-        var visited = {};
-        while (true) {
-            var parents = this.getVisibleParents(current);
-            if (parents.length === 0) break;
-            var pid = parents[0];
-            if (visited[pid]) break;
-            visited[pid] = true;
-            spineIds.push(pid);
-            current = pid;
-        }
-
-        if (spineIds.length === 0) continue;
-
-        // Shift all spine ancestors so the first ancestor's center aligns with targetX
-        var firstLayout = this.layoutMap[spineIds[0]];
-        if (!firstLayout || firstLayout.x === undefined) continue;
-
-        var dx = targetX - firstLayout.centerX;
-        if (Math.abs(dx) < 1) continue;
-
-        for (var i = 0; i < spineIds.length; i++) {
-            var sl = this.layoutMap[spineIds[i]];
-            if (sl && sl.x !== undefined) {
-                sl.x += dx;
-                sl.centerX += dx;
-            }
-        }
-    }
-};
-
 // ==========================================================================
 // RENDER — create HTML cards and draw canvas connectors
 // ==========================================================================
@@ -965,6 +896,49 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
     wrapper.style.left = layout.x + 'px';
     wrapper.style.top = layout.y + 'px';
     wrapper.dataset.nodeId = node.id;
+
+    // Debug: Alt+Click on card dumps node info to console
+    if (this.debug) {
+        var nav = this;
+        wrapper.addEventListener('click', function (e) {
+            if (e.altKey || e.shiftKey) {
+                e.stopPropagation();
+                e.preventDefault();
+                var n = nav.nodeMap[node.id];
+                var layout = nav.layoutMap[node.id];
+                var pEdges = nav.parentEdges[node.id] || [];
+                var cEdges = nav.childrenMap[node.id] || [];
+
+                // Detect which card was clicked
+                var clickedCard = e.target.closest('.sp-card');
+                var cards = wrapper.querySelectorAll('.sp-card');
+                var cardIndex = -1;
+                for (var ci = 0; ci < cards.length; ci++) {
+                    if (cards[ci] === clickedCard) { cardIndex = ci; break; }
+                }
+                var clickedPerson;
+                if (cardIndex <= 0) {
+                    clickedPerson = n ? n.person : null;
+                } else {
+                    clickedPerson = (n && n.families && n.families[cardIndex - 1]) ? n.families[cardIndex - 1].spouse : null;
+                }
+
+                console.group('[SPTree] DEBUG node ' + node.id + ' (card ' + cardIndex + ')');
+                console.log('clicked:', clickedPerson ? clickedPerson.xref : '?', '| name:', clickedPerson ? clickedPerson.name : '?', '| sex:', clickedPerson ? clickedPerson.sex : '?');
+                console.log('person:', n ? n.person.xref : '?', '| name:', n ? n.person.name : '?');
+                console.log('gen:', n ? n.generation : '?', '| swap:', n ? n.genderSwapped : '?', '| oxref:', n ? n.originalChildXref : '?');
+                console.log('families:', n && n.families ? n.families.length : 0,
+                    n && n.families ? n.families.map(function(f, i) {
+                        return 'F' + i + ':{fam=' + (f.familyXref || '?') + ' person=' + (n.person.xref || '?') + ' spouse=' + (f.spouse ? f.spouse.xref : 'none') + '}';
+                    }) : []);
+                console.log('layout:', layout ? { x: Math.round(layout.x), y: Math.round(layout.y), w: layout.w, centerX: Math.round(layout.centerX) } : 'none');
+                console.log('parentEdges:', pEdges.map(function(pe) { return { from: pe.from, line: pe.lineIndex, type: pe.line }; }));
+                console.log('children:', cEdges);
+                console.log('raw node:', n);
+                console.groupEnd();
+            }
+        });
+    }
 
     // Person card
     var personCard = this.createPersonCard(node.person, node.isOrigin);
@@ -1537,31 +1511,6 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
 };
 
 /**
- * Create a small tree icon button above a person card for ancestor switching.
- * The icon appears above the person whose ancestor line is hidden.
- */
-FamilyNavigator.prototype.createAncestorTreeIcon = function (nodeId, lineIndex) {
-    var nav = this;
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'sp-ancestor-tree-btn';
-    btn.title = lineIndex === 0 ? __("Show father's ancestors") : __("Show mother's / spouse's ancestors");
-    btn.innerHTML = '<svg viewBox="0 0 20 20" width="18" height="18">'
-        + '<line x1="10" y1="20" x2="10" y2="7" stroke="currentColor" stroke-width="2"/>'
-        + '<line x1="10" y1="9" x2="4" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'
-        + '<line x1="10" y1="9" x2="16" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'
-        + '<circle cx="4" cy="3" r="2" fill="currentColor"/>'
-        + '<circle cx="16" cy="3" r="2" fill="currentColor"/>'
-        + '</svg>';
-    btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        nav._dbg('CLICK switchLine', nodeId, 'line=' + lineIndex);
-        nav.switchAncestorLine(nodeId, lineIndex);
-    });
-    return btn;
-};
-
-/**
  * Render ancestor tree icons into the floating overlay (not clipped by viewport).
  */
 FamilyNavigator.prototype._renderIconOverlay = function (canvasW, canvasH) {
@@ -1652,39 +1601,6 @@ FamilyNavigator.prototype._renderIconOverlay = function (canvasW, canvasH) {
             this.iconCanvas.appendChild(btn);
         }
     }
-};
-
-/**
- * Create a navigation icon — click to re-center the tree on this person.
- * (Legacy — no longer appended to cards, icons are in the overlay layer.)
- */
-FamilyNavigator.prototype.createNavigateIcon = function (xref) {
-    var nav = this;
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'sp-ancestor-tree-btn sp-ancestor-expand';
-    btn.title = __('Navigate to ancestors');
-    var cc = wtpCSSColors;
-    btn.innerHTML = '<svg viewBox="0 0 60 22" width="67" height="17" aria-hidden="true">'
-        + '<line x1="30" y1="18" x2="16" y2="12" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
-        + '<line x1="30" y1="18" x2="44" y2="12" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
-        + '<line x1="16" y1="8" x2="5" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
-        + '<line x1="16" y1="8" x2="25" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
-        + '<line x1="44" y1="8" x2="35" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
-        + '<line x1="44" y1="8" x2="55" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
-        + '<circle cx="5" cy="3" r="2.6" fill="' + cc.ringMaleFill + '" fill-opacity="0.55" stroke="' + cc.ringMaleStroke + '" stroke-width="1.4"/>'
-        + '<circle cx="25" cy="3" r="2.6" fill="' + cc.ringFemaleFill + '" fill-opacity="0.55" stroke="' + cc.ringFemaleStroke + '" stroke-width="1.4"/>'
-        + '<circle cx="35" cy="3" r="2.6" fill="' + cc.ringMaleFill + '" fill-opacity="0.55" stroke="' + cc.ringMaleStroke + '" stroke-width="1.4"/>'
-        + '<circle cx="55" cy="3" r="2.6" fill="' + cc.ringFemaleFill + '" fill-opacity="0.55" stroke="' + cc.ringFemaleStroke + '" stroke-width="1.4"/>'
-        + '<circle cx="16" cy="10" r="3" fill="' + cc.ringMaleFill + '" fill-opacity="0.55" stroke="' + cc.ringMaleStroke + '" stroke-width="1.6"/>'
-        + '<circle cx="44" cy="10" r="3" fill="' + cc.ringFemaleFill + '" fill-opacity="0.55" stroke="' + cc.ringFemaleStroke + '" stroke-width="1.6"/>'
-        + '<circle cx="30" cy="19" r="3" fill="' + cc.connectorLine + '" fill-opacity="0.35" stroke="' + cc.connectorLine + '" stroke-width="1.8"/>'
-        + '</svg>';
-    btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        nav.navigateTo(xref);
-    });
-    return btn;
 };
 
 /**
@@ -1919,8 +1835,6 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         var srcY = pLayout.y + pLayout.h;
 
         // Helper functions for connector source and target positions
-        var self = this;
-        
         function coupleLineCenterX(nodeId, layout, fi) {
             var wrapper = self.cardElements[nodeId];
             if (wrapper) {
@@ -2313,16 +2227,6 @@ FamilyNavigator.prototype._getKnownXrefs = function () {
         }
     }
     return Object.keys(xrefs).join(',');
-};
-
-/**
- * Load ancestors for a node that doesn't have them yet.
- * Navigates to the person, reloading the entire tree centered on them.
- */
-FamilyNavigator.prototype.expandAncestors = function (nodeId, ancestorLine) {
-    var xref = ancestorLine.spouseXref || ancestorLine.personXref || '';
-    if (!xref) return;
-    this.navigateTo(xref);
 };
 
 /**
@@ -3083,12 +2987,6 @@ FamilyNavigator.prototype.renderSearchResults = function (results) {
     }
 
     this.searchResults.classList.add('sp-show');
-};
-
-FamilyNavigator.prototype._escapeHtml = function (str) {
-    var div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
 };
 
 /**

@@ -67,20 +67,22 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 │       └── FamilyTreeRenderer.php  # JSON tree data generator
 ├── Traits/
 │   └── DiagramChartFeature.php     # Chart menu integration
-└── resources/
-    ├── AppSettings.php
-    ├── css/
-    │   └── navigator.css           # Complete module stylesheet
-    ├── js/
-    │   └── navigator.js            # Main navigation engine
-    └── views/
-        ├── inject-script.phtml
-        ├── inject-style.phtml
-        └── modules/
-            └── spNavigator/
-                ├── diagram.phtml
-                ├── subtitle.phtml
-                └── viewport.phtml
+├── resources/
+│   ├── lang/                       # Translation files (PO/MO)
+│   ├── css/
+│   │   └── navigator.css           # Complete module stylesheet
+│   ├── js/
+│   │   └── navigator.js            # Main navigation engine
+│   └── views/
+│       ├── inject-script.phtml
+│       ├── inject-style.phtml
+│       └── modules/
+│           └── spNavigator/
+│               ├── diagram.phtml
+│               ├── settings.phtml
+│               └── viewport.phtml
+└── tools/
+    └── compile_translations.py     # Translation compiler
 ```
 
 ## Dependencies

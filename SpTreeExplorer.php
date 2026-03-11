@@ -64,7 +64,7 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
 
     public function customModuleLatestVersionUrl(): string
     {
-        return 'https://github.com/szporwolik/webtrees-tree-explorer/releases/latest';
+        return 'https://raw.githubusercontent.com/szporwolik/webtrees-tree-explorer/main/latest-version.txt';
     }
 
     public function customModuleSupportUrl(): string
@@ -195,14 +195,12 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
                     'defaultSources'          => $this->getPreference('default_sources', '0') === '1',
                 ]);
 
-                $jsExpandUrl = addcslashes($expandUrl, "'\\");
-                $jsSearchUrl = addcslashes($searchUrl, "'\\");
                 $emptyTreeData = json_encode(['nodes' => [], 'edges' => [], 'rootId' => null]);
-                $initScript = 'wtpInitCSSColors(); var ' . $prefix . 'Controller = new FamilyNavigator("'
-                    . $prefix . '", true, '
-                    . $emptyTreeData . ', "'
-                    . $jsExpandUrl . '", "'
-                    . $jsSearchUrl . '");';
+                $initScript = 'wtpInitCSSColors(); var ' . $prefix . 'Controller = new FamilyNavigator('
+                    . json_encode($prefix) . ', true, '
+                    . $emptyTreeData . ', '
+                    . json_encode($expandUrl) . ', '
+                    . json_encode($searchUrl) . ');';
 
                 return $this->viewResponse('modules/spNavigator/diagram', [
                     'individual'  => null,
