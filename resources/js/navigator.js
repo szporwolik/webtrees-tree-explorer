@@ -1470,24 +1470,16 @@ FamilyNavigator.prototype._renderIconOverlay = function (canvasW, canvasH) {
 
             if (info.rebaseOnly) {
                 // Descendant node — expanding ancestors would leave the current tree.
-                // Show a distinct muted/dashed icon; click rebases to that person.
+                // Option C: parent–child chain with curved redirect arrow.
                 var rc = cc.connectorLine;
                 btn.className = 'sp-ancestor-expand sp-ancestor-rebase';
                 btn.title = __('Navigate to ancestors');
                 btn.innerHTML = '<svg viewBox="0 0 60 22" width="67" height="17" aria-hidden="true">'
-                    + '<line x1="30" y1="18" x2="16" y2="12" stroke="' + rc + '" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="3,2"/>'
-                    + '<line x1="30" y1="18" x2="44" y2="12" stroke="' + rc + '" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="3,2"/>'
-                    + '<line x1="16" y1="8" x2="5" y2="4" stroke="' + rc + '" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="3,2"/>'
-                    + '<line x1="16" y1="8" x2="25" y2="4" stroke="' + rc + '" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="3,2"/>'
-                    + '<line x1="44" y1="8" x2="35" y2="4" stroke="' + rc + '" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="3,2"/>'
-                    + '<line x1="44" y1="8" x2="55" y2="4" stroke="' + rc + '" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="3,2"/>'
-                    + '<circle cx="5" cy="3" r="2.6" fill="' + rc + '" fill-opacity="0.25" stroke="' + rc + '" stroke-width="1.4" stroke-opacity="0.5"/>'
-                    + '<circle cx="25" cy="3" r="2.6" fill="' + rc + '" fill-opacity="0.25" stroke="' + rc + '" stroke-width="1.4" stroke-opacity="0.5"/>'
-                    + '<circle cx="35" cy="3" r="2.6" fill="' + rc + '" fill-opacity="0.25" stroke="' + rc + '" stroke-width="1.4" stroke-opacity="0.5"/>'
-                    + '<circle cx="55" cy="3" r="2.6" fill="' + rc + '" fill-opacity="0.25" stroke="' + rc + '" stroke-width="1.4" stroke-opacity="0.5"/>'
-                    + '<circle cx="16" cy="10" r="3" fill="' + rc + '" fill-opacity="0.25" stroke="' + rc + '" stroke-width="1.6" stroke-opacity="0.5"/>'
-                    + '<circle cx="44" cy="10" r="3" fill="' + rc + '" fill-opacity="0.25" stroke="' + rc + '" stroke-width="1.6" stroke-opacity="0.5"/>'
-                    + '<circle cx="30" cy="19" r="3" fill="' + rc + '" fill-opacity="0.35" stroke="' + rc + '" stroke-width="1.8"/>'
+                    + '<line x1="30" y1="15" x2="30" y2="7" stroke="' + rc + '" stroke-width="1.6" stroke-linecap="round"/>'
+                    + '<circle cx="30" cy="18" r="3" fill="' + rc + '" fill-opacity="0.35" stroke="' + rc + '" stroke-width="1.8"/>'
+                    + '<circle cx="30" cy="4" r="3" fill="' + rc + '" fill-opacity="0.25" stroke="' + rc + '" stroke-width="1.6" stroke-opacity="0.55"/>'
+                    + '<path d="M38,17 C46,17 46,4 38,4" fill="none" stroke="' + rc + '" stroke-width="1.4" stroke-opacity="0.7"/>'
+                    + '<polygon points="38,1.5 42,4 38,6.5" fill="' + rc + '" fill-opacity="0.7"/>'
                     + '</svg>';
                 (function(iconInfo) {
                     btn.addEventListener('click', function (e) {
@@ -1496,23 +1488,15 @@ FamilyNavigator.prototype._renderIconOverlay = function (canvasW, canvasH) {
                     });
                 })(info);
             } else {
-                // Ancestor/origin node — expand ancestors in-place
+                // Ancestor/origin node — Option D: mini pedigree (2 parents + 1 child).
                 btn.className = 'sp-ancestor-expand';
                 btn.title = __('Expand ancestors');
                 btn.innerHTML = '<svg viewBox="0 0 60 22" width="67" height="17" aria-hidden="true">'
-                    + '<line x1="30" y1="18" x2="16" y2="12" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
-                    + '<line x1="30" y1="18" x2="44" y2="12" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
-                    + '<line x1="16" y1="8" x2="5" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
-                    + '<line x1="16" y1="8" x2="25" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
-                    + '<line x1="44" y1="8" x2="35" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
-                    + '<line x1="44" y1="8" x2="55" y2="4" stroke="' + cc.connectorLine + '" stroke-width="1.4" stroke-linecap="round"/>'
-                    + '<circle cx="5" cy="3" r="2.6" fill="' + cc.ringMaleFill + '" fill-opacity="0.55" stroke="' + cc.ringMaleStroke + '" stroke-width="1.4"/>'
-                    + '<circle cx="25" cy="3" r="2.6" fill="' + cc.ringFemaleFill + '" fill-opacity="0.55" stroke="' + cc.ringFemaleStroke + '" stroke-width="1.4"/>'
-                    + '<circle cx="35" cy="3" r="2.6" fill="' + cc.ringMaleFill + '" fill-opacity="0.55" stroke="' + cc.ringMaleStroke + '" stroke-width="1.4"/>'
-                    + '<circle cx="55" cy="3" r="2.6" fill="' + cc.ringFemaleFill + '" fill-opacity="0.55" stroke="' + cc.ringFemaleStroke + '" stroke-width="1.4"/>'
-                    + '<circle cx="16" cy="10" r="3" fill="' + cc.ringMaleFill + '" fill-opacity="0.55" stroke="' + cc.ringMaleStroke + '" stroke-width="1.6"/>'
-                    + '<circle cx="44" cy="10" r="3" fill="' + cc.ringFemaleFill + '" fill-opacity="0.55" stroke="' + cc.ringFemaleStroke + '" stroke-width="1.6"/>'
-                    + '<circle cx="30" cy="19" r="3" fill="' + cc.connectorLine + '" fill-opacity="0.35" stroke="' + cc.connectorLine + '" stroke-width="1.8"/>'
+                    + '<line x1="30" y1="15" x2="18" y2="7" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
+                    + '<line x1="30" y1="15" x2="42" y2="7" stroke="' + cc.connectorLine + '" stroke-width="1.6" stroke-linecap="round"/>'
+                    + '<circle cx="18" cy="4" r="3.2" fill="' + cc.ringMaleFill + '" fill-opacity="0.55" stroke="' + cc.ringMaleStroke + '" stroke-width="1.6"/>'
+                    + '<circle cx="42" cy="4" r="3.2" fill="' + cc.ringFemaleFill + '" fill-opacity="0.55" stroke="' + cc.ringFemaleStroke + '" stroke-width="1.6"/>'
+                    + '<circle cx="30" cy="18" r="3" fill="' + cc.connectorLine + '" fill-opacity="0.35" stroke="' + cc.connectorLine + '" stroke-width="1.8"/>'
                     + '</svg>';
                 (function(iconInfo, nodeId) {
                     btn.addEventListener('click', function (e) {
@@ -1576,7 +1560,7 @@ FamilyNavigator.prototype.createLazyElement = function (node, layout) {
     el.style.height = this.LAZY_H + 'px';
     el.dataset.nodeId = node.id;
     el.dataset.familyXref = node.familyXref;
-    el.textContent = __('+ expand');
+    el.textContent = __('Expand children');
 
     var nav = this;
     el.addEventListener('click', function () {

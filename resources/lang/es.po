@@ -205,8 +205,8 @@ msgid "Navigate to ancestors"
 msgstr "Navegar a antepasados"
 
 #: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
-msgid "+ expand"
-msgstr "+ expandir"
+msgid "Expand children"
+msgstr "Expandir hijos"
 
 #: resources/views/modules/spNavigator/viewport.phtml (JS bridge)
 msgid "No results found"
