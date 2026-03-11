@@ -312,6 +312,46 @@ FamilyNavigator.prototype.buildIndex = function (data) {
     }
 };
 
+/**
+ * Rebuild childrenMap and parentEdges from edgeMap.
+ * Ensures consistent state after incremental merge operations,
+ * including the same familyIndex + birth-date sort as buildIndex.
+ */
+FamilyNavigator.prototype._rebuildRelationships = function () {
+    this.childrenMap = {};
+    this.parentEdges = {};
+
+    for (var key in this.edgeMap) {
+        var edge = this.edgeMap[key];
+        if (!this.childrenMap[edge.from]) this.childrenMap[edge.from] = [];
+        this.childrenMap[edge.from].push(edge.to);
+        if (!this.parentEdges[edge.to]) this.parentEdges[edge.to] = [];
+        this.parentEdges[edge.to].push(edge);
+    }
+
+    var self = this;
+    for (var parentId in this.childrenMap) {
+        this.childrenMap[parentId].sort(function (a, b) {
+            var eaKey = parentId + '->' + a;
+            var ebKey = parentId + '->' + b;
+            var ea = self.edgeMap[eaKey];
+            var eb = self.edgeMap[ebKey];
+            var fa = (ea && ea.familyIndex !== undefined) ? ea.familyIndex : -1;
+            var fb = (eb && eb.familyIndex !== undefined) ? eb.familyIndex : -1;
+            if (fa !== fb) return fa - fb;
+
+            var na = self.nodeMap[a];
+            var nb = self.nodeMap[b];
+            var ja = (na && na.childBirthJd) || 0;
+            var jb = (nb && nb.childBirthJd) || 0;
+            if (ja === 0 && jb === 0) return 0;
+            if (ja === 0) return 1;
+            if (jb === 0) return -1;
+            return ja - jb;
+        });
+    }
+};
+
 // ==========================================================================
 // TREE LAYOUT ENGINE — computes x,y for every node
 //
@@ -2262,6 +2302,13 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
                         nav.activeLines = {};
                         nav._expansionHistory = [];
 
+                        // Update expandUrl to use the new rootXref so that
+                        // subsequent AJAX calls use the correct session counter
+                        nav.expandUrl = nav.expandUrl.replace(
+                            /rootXref=[^&]*/,
+                            'rootXref=' + encodeURIComponent(xref)
+                        );
+
                         nav.buildIndex(newData);
                         nav._setCurrentXref(xref);
                         nav.measureAndRender();
@@ -2335,154 +2382,109 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
 /**
  * Merge newly loaded subtree data, replacing a lazy placeholder.
  * Handles both ancestor (direction='up') and descendant (direction='down') placeholders.
+ *
+ * Strategy: modify nodeMap + edgeMap incrementally, then rebuild
+ * childrenMap / parentEdges from edgeMap (with sorting) to guarantee
+ * consistent state for the layout engine.
  */
 FamilyNavigator.prototype.mergeLazyData = function (lazyNodeId, newData) {
     var lazyNode = this.nodeMap[lazyNodeId];
     var direction = (lazyNode && lazyNode.direction) || 'up';
 
     if (direction === 'down') {
-        // Descendant expansion — lazy node is a child, find its parent
+        // ---- Descendant expansion ----
+        // The lazy node is a child of some parent; find that parent first.
         var parentId = null;
         var oldEdge = null;
         var parentEdgeList = this.parentEdges[lazyNodeId] || [];
         if (parentEdgeList.length > 0) {
             parentId = parentEdgeList[0].from;
-            var ek = parentId + '->' + lazyNodeId;
-            oldEdge = this.edgeMap[ek] || null;
+            oldEdge = this.edgeMap[parentId + '->' + lazyNodeId] || null;
         }
 
-        // Remove lazy node
+        // 1. Remove lazy node + its edge
         delete this.nodeMap[lazyNodeId];
         delete this.layoutMap[lazyNodeId];
-
-        // Remove old edges
         if (parentId) {
-            var edgeKey = parentId + '->' + lazyNodeId;
-            delete this.edgeMap[edgeKey];
-            if (this.childrenMap[parentId]) {
-                this.childrenMap[parentId] = this.childrenMap[parentId].filter(function (id) {
-                    return id !== lazyNodeId;
-                });
-            }
+            delete this.edgeMap[parentId + '->' + lazyNodeId];
         }
-        delete this.parentEdges[lazyNodeId];
-        delete this.childrenMap[lazyNodeId];
 
-        // Add new nodes
+        // 2. Add new nodes
         for (var i = 0; i < newData.nodes.length; i++) {
-            var n = newData.nodes[i];
-            this.nodeMap[n.id] = n;
+            this.nodeMap[newData.nodes[i].id] = newData.nodes[i];
         }
 
-        // Add new edges
+        // 3. Add new internal edges (within each child subtree)
         for (var i = 0; i < newData.edges.length; i++) {
             var edge = newData.edges[i];
-            var key = edge.from + '->' + edge.to;
-            this.edgeMap[key] = edge;
-            if (!this.childrenMap[edge.from]) this.childrenMap[edge.from] = [];
-            this.childrenMap[edge.from].push(edge.to);
-            if (!this.parentEdges[edge.to]) this.parentEdges[edge.to] = [];
-            this.parentEdges[edge.to].push(edge);
+            this.edgeMap[edge.from + '->' + edge.to] = edge;
         }
 
-        // Connect child roots to existing parent
+        // 4. Create parent → child-root edges (preserving familyIndex)
         if (parentId && newData.childRootIds) {
             var familyIndex = (oldEdge && oldEdge.familyIndex !== undefined) ? oldEdge.familyIndex : 0;
             for (var i = 0; i < newData.childRootIds.length; i++) {
-                var childRootId = newData.childRootIds[i];
-                var newEdge = {
+                var crid = newData.childRootIds[i];
+                this.edgeMap[parentId + '->' + crid] = {
                     from: parentId,
-                    to: childRootId,
+                    to: crid,
                     type: 'parent-child',
                     familyIndex: familyIndex
                 };
-                var newKey = parentId + '->' + childRootId;
-                this.edgeMap[newKey] = newEdge;
-                if (!this.childrenMap[parentId]) this.childrenMap[parentId] = [];
-                this.childrenMap[parentId].push(childRootId);
-                if (!this.parentEdges[childRootId]) this.parentEdges[childRootId] = [];
-                this.parentEdges[childRootId].push(newEdge);
             }
         }
+
+        // 5. Full rebuild of childrenMap / parentEdges (with sorting)
+        this._rebuildRelationships();
 
         this.measureAndRender();
         this.focusNode(parentId || (newData.childRootIds && newData.childRootIds.length > 0 ? newData.childRootIds[0] : null));
     } else {
-        // Ancestor expansion (direction='up')
+        // ---- Ancestor expansion (direction='up') ----
+        // The lazy node IS the parent; find its child.
         var oldEdge = null;
-
-        // The lazy node IS the parent — find child via childrenMap
         var childId = null;
         if (this.childrenMap[lazyNodeId] && this.childrenMap[lazyNodeId].length > 0) {
             childId = this.childrenMap[lazyNodeId][0];
-            var ek = lazyNodeId + '->' + childId;
-            oldEdge = this.edgeMap[ek] || null;
+            oldEdge = this.edgeMap[lazyNodeId + '->' + childId] || null;
         }
-
         var parentId = childId;
 
-        // Remove the lazy node
+        // 1. Remove lazy node + its edge
         delete this.nodeMap[lazyNodeId];
         delete this.layoutMap[lazyNodeId];
-
-        // Remove old edge(s)
         if (parentId) {
-            var edgeKey = lazyNodeId + '->' + parentId;
-            delete this.edgeMap[edgeKey];
-            delete this.childrenMap[lazyNodeId];
-            delete this.parentEdges[lazyNodeId];
-            // Clean parentEdges on the connected node
-            if (this.parentEdges[parentId]) {
-                this.parentEdges[parentId] = this.parentEdges[parentId].filter(function (e) {
-                    return e.from !== lazyNodeId;
-                });
-            }
+            delete this.edgeMap[lazyNodeId + '->' + parentId];
         }
 
-        // Add new nodes
+        // 2. Add new nodes
         for (var i = 0; i < newData.nodes.length; i++) {
-            var n = newData.nodes[i];
-            this.nodeMap[n.id] = n;
+            this.nodeMap[newData.nodes[i].id] = newData.nodes[i];
         }
 
-        // Add new edges
+        // 3. Add new internal edges
         for (var i = 0; i < newData.edges.length; i++) {
             var edge = newData.edges[i];
-            var key = edge.from + '->' + edge.to;
-            this.edgeMap[key] = edge;
-
-            if (!this.childrenMap[edge.from]) {
-                this.childrenMap[edge.from] = [];
-            }
-            this.childrenMap[edge.from].push(edge.to);
-
-            if (!this.parentEdges[edge.to]) {
-                this.parentEdges[edge.to] = [];
-            }
-            this.parentEdges[edge.to].push(edge);
+            this.edgeMap[edge.from + '->' + edge.to] = edge;
         }
 
-        // Connect the new ancestor root to the existing child
+        // 4. Connect new ancestor root to the existing child
         if (parentId && newData.rootId) {
             var newEdge = {
                 from: newData.rootId,
                 to: parentId,
                 type: 'parent-child'
             };
-            // Preserve lineIndex from old edge
             if (oldEdge && oldEdge.lineIndex !== undefined) {
                 newEdge.lineIndex = oldEdge.lineIndex;
                 newEdge.line = oldEdge.line;
             }
-            var newKey = newData.rootId + '->' + parentId;
-            this.edgeMap[newKey] = newEdge;
-            if (!this.childrenMap[newData.rootId]) this.childrenMap[newData.rootId] = [];
-            this.childrenMap[newData.rootId].push(parentId);
-            if (!this.parentEdges[parentId]) this.parentEdges[parentId] = [];
-            this.parentEdges[parentId].push(newEdge);
+            this.edgeMap[newData.rootId + '->' + parentId] = newEdge;
         }
 
-        // Re-measure and re-render, then center on the connected node
+        // 5. Full rebuild of childrenMap / parentEdges (with sorting)
+        this._rebuildRelationships();
+
         this.measureAndRender();
         this.focusNode(parentId || newData.rootId);
     }

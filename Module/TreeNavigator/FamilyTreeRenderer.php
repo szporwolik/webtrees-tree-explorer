@@ -1167,8 +1167,8 @@ class FamilyTreeRenderer
         $this->edges = [];
         $this->visited = [];
 
-        // Set descendant limit relative to expansion point
-        $this->maxGenDown = $generation - 3;
+        // Load exactly 1 generation of children per click (lazy placeholder handles further expansion)
+        $this->maxGenDown = $generation;
 
         // Collect children of the person from the matching family
         $allChildren = [];
