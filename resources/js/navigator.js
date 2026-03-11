@@ -1071,7 +1071,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     var nav = this;
     var genderClass = personData.sex === 'M' ? 'sp-male' : (personData.sex === 'F' ? 'sp-female' : 'sp-unknown');
     var card = document.createElement('div');
-    card.className = 'sp-card ' + genderClass + (isOrigin ? ' sp-origin' : '') + (personData.isUnknown ? ' sp-card-unknown' : '');
+    card.className = 'sp-card ' + genderClass + (isOrigin ? ' sp-origin' : '') + (personData.isUnknown ? ' sp-card-unknown' : '') + (personData.isPrivate ? ' sp-card-private' : '');
     card.dataset.xref = personData.xref || '';
 
     // Unknown person — simplified card with ? icon
@@ -1082,6 +1082,22 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         qMark.className = 'sp-unknown-icon';
         qMark.textContent = '?';
         person.appendChild(qMark);
+        card.appendChild(person);
+        return card;
+    }
+
+    // Private person — simplified card with lock icon and "Private" label
+    if (personData.isPrivate) {
+        var person = document.createElement('div');
+        person.className = 'sp-person sp-private-person';
+        var lockIcon = document.createElement('div');
+        lockIcon.className = 'sp-private-icon';
+        lockIcon.innerHTML = '<svg viewBox="0 0 16 16" width="20" height="20"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+        person.appendChild(lockIcon);
+        var privateName = document.createElement('div');
+        privateName.className = 'sp-private-label';
+        privateName.textContent = personData.name; // "Private" from server
+        person.appendChild(privateName);
         card.appendChild(person);
         return card;
     }

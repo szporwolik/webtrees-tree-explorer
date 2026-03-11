@@ -758,6 +758,49 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
+/* Private person card — data hidden due to privacy settings */
+.sp-card.sp-card-private {
+    background: repeating-linear-gradient(
+        -45deg,
+        #f6f7f9,
+        #f6f7f9 6px,
+        #ecedf1 6px,
+        #ecedf1 12px
+    );
+    border-style: solid;
+    border-color: #c4c7ce;
+    opacity: 0.8;
+    cursor: default;
+}
+
+.sp-card.sp-card-private:hover {
+    transform: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.sp-private-person {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 0;
+}
+
+.sp-private-icon {
+    color: #9ca3af;
+    line-height: 1;
+}
+
+.sp-private-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    user-select: none;
+}
+
 .sp-unknown-icon {
     width: 100%;
     text-align: center;

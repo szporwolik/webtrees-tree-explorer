@@ -217,6 +217,34 @@ class FamilyTreeRenderer
      */
     private function buildPersonData(Individual $person, bool $isOrigin = false): array
     {
+        $accessLevel = Auth::accessLevel($this->tree);
+        $canShow = $person->canShow($accessLevel);
+
+        // Private person — return minimal structure with only safe data
+        if (!$canShow) {
+            return [
+                'xref'     => $person->xref(),
+                'name'     => strip_tags($person->fullName()), // returns "Private" automatically
+                'years'    => '',
+                'dateLine' => '',
+                'dateLineQuality' => 'unknown',
+                'birthPlace' => '',
+                'deathPlace' => '',
+                'fatherAgeAtBirth' => null,
+                'motherAgeAtBirth' => null,
+                'sex'      => $person->sex(),
+                'url'      => '',
+                'addNoteUrl' => '',
+                'sourceCount' => 0,
+                'noteCount' => 0,
+                'mediaCount' => 0,
+                'thumb'    => null,
+                'isDead'   => false,
+                'isOrigin' => $isOrigin,
+                'isPrivate' => true,
+            ];
+        }
+
         $birthDate = $person->getBirthDate();
         $deathDate = $person->getDeathDate();
         $birthMeta = ['quality' => 'exact', 'place' => ''];
@@ -287,9 +315,10 @@ class FamilyTreeRenderer
             // No image available
         }
 
-        $sourceCount = $this->countAllTags($person->gedcom(), 'SOUR');
-        $noteCount   = $this->countAllTags($person->gedcom(), 'NOTE');
-        $mediaCount  = $this->countAllTags($person->gedcom(), 'OBJE');
+        $privateGedcom = $person->privatizeGedcom($accessLevel);
+        $sourceCount = $this->countAllTags($privateGedcom, 'SOUR');
+        $noteCount   = $this->countAllTags($privateGedcom, 'NOTE');
+        $mediaCount  = $this->countAllTags($privateGedcom, 'OBJE');
 
         return [
             'xref'     => $person->xref(),
@@ -314,6 +343,7 @@ class FamilyTreeRenderer
             'thumb'    => $thumbUrl,
             'isDead'   => $person->isDead(),
             'isOrigin' => $isOrigin,
+            'isPrivate' => false,
         ];
     }
 
@@ -588,13 +618,14 @@ class FamilyTreeRenderer
                 }
             }
 
-            $familySourceCount = $this->countAllTags($spouseFamily->gedcom(), 'SOUR');
-            $familyNoteCount   = $this->countAllTags($spouseFamily->gedcom(), 'NOTE');
-            $familyMediaCount  = $this->countAllTags($spouseFamily->gedcom(), 'OBJE');
+            $privateFamGedcom = $spouseFamily->privatizeGedcom(Auth::accessLevel($this->tree));
+            $familySourceCount = $this->countAllTags($privateFamGedcom, 'SOUR');
+            $familyNoteCount   = $this->countAllTags($privateFamGedcom, 'NOTE');
+            $familyMediaCount  = $this->countAllTags($privateFamGedcom, 'OBJE');
 
-            // Death date JDs for duration fallback
-            $personDeathJd = $person->getDeathDate()->isOK() ? $person->getDeathDate()->julianDay() : 0;
-            $spouseDeathJd = ($spouse instanceof Individual && $spouse->getDeathDate()->isOK()) ? $spouse->getDeathDate()->julianDay() : 0;
+            // Death date JDs for duration fallback (gate behind canShow to respect privacy)
+            $personDeathJd = ($person->canShow() && $person->getDeathDate()->isOK()) ? $person->getDeathDate()->julianDay() : 0;
+            $spouseDeathJd = ($spouse instanceof Individual && $spouse->canShow() && $spouse->getDeathDate()->isOK()) ? $spouse->getDeathDate()->julianDay() : 0;
             $durationLabel = $this->formatRelationshipDuration($marriageJd, $divorceJd, $nextMarriageJd, $personDeathJd, $spouseDeathJd);
 
             // Ages at marriage (using canonical husband/wife from the family record)
@@ -603,14 +634,14 @@ class FamilyTreeRenderer
             if ($marriageJd > 0) {
                 $marriageDateObj = $spouseFamily->getMarriageDate();
                 $husb = $spouseFamily->husband();
-                if ($husb instanceof Individual && $husb->getBirthDate()->isOK()) {
+                if ($husb instanceof Individual && $husb->canShow() && $husb->getBirthDate()->isOK()) {
                     $hAge = new Age($husb->getBirthDate(), $marriageDateObj);
                     if ($hAge->ageYears() >= 0) {
                         $husbandAgeAtMarriage = $hAge->ageYears();
                     }
                 }
                 $wif = $spouseFamily->wife();
-                if ($wif instanceof Individual && $wif->getBirthDate()->isOK()) {
+                if ($wif instanceof Individual && $wif->canShow() && $wif->getBirthDate()->isOK()) {
                     $wAge = new Age($wif->getBirthDate(), $marriageDateObj);
                     if ($wAge->ageYears() >= 0) {
                         $wifeAgeAtMarriage = $wAge->ageYears();
@@ -1164,11 +1195,11 @@ class FamilyTreeRenderer
     public function expandNode(string $familyId, string $personId, Tree $tree, int $generation = 0): string
     {
         $family = Registry::familyFactory()->make($familyId, $tree);
-        if (!$family instanceof Family) {
+        if (!$family instanceof Family || !$family->canShow()) {
             return json_encode(['nodes' => [], 'edges' => []]);
         }
         $person = $family->husband() ?? $family->wife();
-        if (!$person instanceof Individual) {
+        if (!$person instanceof Individual || !$person->canShow()) {
             return json_encode(['nodes' => [], 'edges' => []]);
         }
 
@@ -1199,7 +1230,7 @@ class FamilyTreeRenderer
     public function navigateTo(string $xref, Tree $tree): string
     {
         $person = Registry::individualFactory()->make($xref, $tree);
-        if (!$person instanceof Individual) {
+        if (!$person instanceof Individual || !$person->canShow()) {
             return json_encode(['nodes' => [], 'edges' => [], 'rootId' => null]);
         }
 
@@ -1225,7 +1256,7 @@ class FamilyTreeRenderer
     public function expandDescendants(string $personXref, string $familyXref, Tree $tree, int $generation = 0): string
     {
         $person = Registry::individualFactory()->make($personXref, $tree);
-        if (!$person instanceof Individual) {
+        if (!$person instanceof Individual || !$person->canShow()) {
             return json_encode(['nodes' => [], 'edges' => [], 'childRootIds' => []]);
         }
 
