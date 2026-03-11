@@ -55,6 +55,7 @@ window.wtpTranslations = <?= json_encode([
     'Navigate to ancestors'            => I18N::translate('Navigate to ancestors'),
     'Expand children'                  => I18N::translate('Expand children'),
     'No results found'                 => I18N::translate('No results found'),
+    'Go to start person'               => I18N::translate('Go to start person'),
     'Search person…'                   => I18N::translate('Search person...'),
     'Sources:'                         => I18N::translate('Sources:'),
     'Notes:'                           => I18N::translate('Notes:'),
@@ -63,7 +64,7 @@ window.wtpTranslations = <?= json_encode([
 </script>
 
 <div class="wt-chart wt-chart-interactive wtp-plugin-root">
-    <div id="<?= $prefix ?>_wrap" class="sp-navigator" data-url-expand="<?= e($expandUrl) ?>" data-url-search="<?= e($searchUrl) ?>" data-default-details="<?= $defaultDetails ? '1' : '0' ?>" data-default-advanced="<?= $defaultAdvancedControls ? '1' : '0' ?>" data-default-sources="<?= $defaultSources ? '1' : '0' ?>" style="height: 500px">
+    <div id="<?= $prefix ?>_wrap" class="sp-navigator" data-url-expand="<?= e($expandUrl) ?>" data-url-search="<?= e($searchUrl) ?>" data-base-xref="<?= e($rootXref) ?>" data-default-details="<?= $defaultDetails ? '1' : '0' ?>" data-default-advanced="<?= $defaultAdvancedControls ? '1' : '0' ?>" data-default-sources="<?= $defaultSources ? '1' : '0' ?>" style="height: 500px">
         <div id="<?= $prefix ?>_overlay" class="sp-loading-overlay sp-overlay-active">
             <div class="sp-loading-spinner"></div>
         </div>
@@ -88,6 +89,9 @@ window.wtpTranslations = <?= json_encode([
                     <?= I18N::translate('Cancel') ?>
                 </button>
             </div>
+            <button id="<?= $prefix ?>_btnHome" class="sp-btn" title="<?= I18N::translate('Go to start person') ?>">
+                <svg viewBox="0 0 16 16" width="16" height="16"><path d="M2 8l6-6 6 6M4 7v6h3v-3h2v3h3V7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
             <span class="sp-toolbar-sep"></span>
             <button id="<?= $prefix ?>_btnZoomOut" class="sp-btn" title="<?= I18N::translate('Zoom out') ?>">
                 <svg viewBox="0 0 16 16" width="16" height="16"><line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>

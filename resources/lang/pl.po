@@ -275,3 +275,7 @@ msgstr "Domyślnie pokazuj źródła"
 #: resources/views/modules/spNavigator/settings.phtml
 msgid "Show source, note, and media count badges on person cards and marriage chips by default."
 msgstr "Domyślnie pokazuj liczniki źródeł, notatek i mediów na kartach osób i znacznikach małżeństw."
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Go to start person"
+msgstr "Przejdź do osoby startowej"

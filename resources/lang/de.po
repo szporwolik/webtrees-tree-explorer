@@ -275,3 +275,7 @@ msgstr "Quellen standardmäßig anzeigen"
 #: resources/views/modules/spNavigator/settings.phtml
 msgid "Show source, note, and media count badges on person cards and marriage chips by default."
 msgstr "Quellen-, Notiz- und Medienzähler auf Personenkarten und Heiratsmarkierungen standardmäßig anzeigen."
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Go to start person"
+msgstr "Zur Startperson wechseln"

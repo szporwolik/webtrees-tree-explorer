@@ -275,3 +275,7 @@ msgstr "Afficher les sources par défaut"
 #: resources/views/modules/spNavigator/settings.phtml
 msgid "Show source, note, and media count badges on person cards and marriage chips by default."
 msgstr "Afficher les compteurs de sources, notes et médias sur les fiches de personnes et les marqueurs de mariage par défaut."
+
+#: resources/views/modules/spNavigator/viewport.phtml
+msgid "Go to start person"
+msgstr "Aller à la personne de départ"

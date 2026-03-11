@@ -144,6 +144,9 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     // Track the currently displayed root person xref (for share links)
     this.currentRootXref = '';
 
+    // Base person xref — the person the tree was originally loaded for (home button)
+    this.baseXref = this.container ? this.container.getAttribute('data-base-xref') || '' : '';
+
     // Expansion history — records each AJAX expansion for share-link replay
     this._expansionHistory = []; // [{type:'lazy'|'ancestor', fid, pid, dir?, lineIndex?}]
 
@@ -2757,6 +2760,15 @@ FamilyNavigator.prototype.initToolbar = function () {
     if (btnShare) {
         btnShare.addEventListener('click', function () {
             nav.copyShareLink(btnShare);
+        });
+    }
+
+    var btnHome = document.getElementById(prefix + '_btnHome');
+    if (btnHome) {
+        btnHome.addEventListener('click', function () {
+            if (nav.baseXref) {
+                nav.navigateTo(nav.baseXref);
+            }
         });
     }
 
