@@ -27,6 +27,9 @@ use Fisharebest\Webtrees\Module\ModuleGlobalTrait;
 use Fisharebest\Webtrees\Module\ModuleChartInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomTrait;
+use Fisharebest\Webtrees\Module\ModuleMenuInterface;
+use Fisharebest\Webtrees\Module\ModuleMenuTrait;
+use Fisharebest\Webtrees\Tree;
 use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Validator;
 use Fisharebest\Webtrees\View;
@@ -45,11 +48,12 @@ use SpTreeExplorer\FamilyNav\Traits\DiagramChartFeature;
  * @license https://opensource.org/licenses/GPL-3.0 GNU General Public License v3.0
  */
 class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, ModuleCustomInterface,
-    ModuleChartInterface, ModuleConfigInterface
+    ModuleChartInterface, ModuleConfigInterface, ModuleMenuInterface
 {
     use ModuleCustomTrait;
     use ModuleGlobalTrait;
     use ModuleConfigTrait;
+    use ModuleMenuTrait;
     use DiagramChartFeature;
 
     public function customModuleAuthorName(): string
@@ -94,6 +98,27 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
     public function description(): string
     {
         return I18N::translate('An interactive tree explorer showing ancestors and descendants.');
+    }
+
+    /**
+     * Top navigation menu entry.
+     */
+    public function getMenu(Tree $tree): ?Menu
+    {
+        $individual = $tree->significantIndividual(Auth::user());
+        $xref = $individual->canShow() ? $individual->xref() : '';
+
+        return new Menu(
+            $this->title(),
+            route('module', [
+                'module' => $this->name(),
+                'action' => 'Chart',
+                'tree'   => $tree->name(),
+                'xref'   => $xref,
+            ]),
+            'menu-chart-tree',
+            ['rel' => 'nofollow']
+        );
     }
 
     /**
