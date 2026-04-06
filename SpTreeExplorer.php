@@ -82,9 +82,19 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
 
     public function customTranslations(string $language): array
     {
-        $file = $this->resourcesFolder() . 'lang' . DIRECTORY_SEPARATOR . $language . '.php';
+        $directory  = $this->resourcesFolder() . 'lang' . DIRECTORY_SEPARATOR;
+        $normalized = str_replace('_', '-', $language);
+        $base       = explode('-', $normalized)[0];
 
-        return file_exists($file) ? require $file : [];
+        foreach (array_unique([$language, $normalized, $base]) as $locale) {
+            $file = $directory . $locale . '.php';
+
+            if (file_exists($file)) {
+                return require $file;
+            }
+        }
+
+        return [];
     }
 
     public function title(): string
