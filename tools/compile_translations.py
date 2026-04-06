@@ -120,7 +120,7 @@ def po_to_mo(po_path, mo_path):
 if __name__ == "__main__":
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     lang_dir = os.path.join(project_root, "resources", "lang")
-    for lang in ["pl", "de", "es", "fr", "ru"]:
+    for lang in ["pl", "de", "es", "fr", "nl", "ru"]:
         po = os.path.join(lang_dir, f"{lang}.po")
         mo = os.path.join(lang_dir, f"{lang}.mo")
         if os.path.exists(po):
