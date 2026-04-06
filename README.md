@@ -22,7 +22,6 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 • Expand / collapse branches with click  
 • Center on root person  
 • Fullscreen toggle  
-• Configurable generation depth (1–25)  
 • Gender-coded card borders (blue = male, pink = female)  
 • **Search dropdown** to find and navigate to any person in the tree  
 • **Multiple marriages support** — all spouses and children from all marriages displayed  
@@ -67,7 +66,6 @@ English uses the built-in source strings and does not need a separate language f
 ├── SpTreeExplorer.php              # Main module class
 ├── SpTreeExplorerHandler.php       # AJAX request handler
 ├── autoload.php                    # PSR-4 autoloader
-├── LICENSE.md                      # GPL-3.0
 ├── README.md
 ├── latest-version.txt
 ├── screenshots/                    # README images
@@ -101,8 +99,8 @@ English uses the built-in source strings and does not need a separate language f
 • Uses webtrees API: `Individual`, `Family`, `Tree`, `Auth`, `Registry`, `I18N`, etc.
 
 **JavaScript:**  
-• Native ES6+ JavaScript (no external frameworks required)  
-• Uses standard browser APIs: Canvas, Fetch, DOM manipulation
+• ES5 JavaScript — no external frameworks required  
+• Uses standard browser APIs: Canvas, XMLHttpRequest, DOM manipulation
 
 ## Roadmap / Future Features
 
