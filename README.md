@@ -27,6 +27,8 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 • **Search dropdown** to find and navigate to any person in the tree  
 • **Multiple marriages support** — all spouses and children from all marriages displayed  
 • **Unknown parent placeholders** — when siblings exist but parents don't, synthetic "?" boxes are created  
+• **Source / note / media badges and quick actions** on person and family cards  
+• **Configurable default view settings** for details, sources, and advanced controls  
 • Print-friendly styling  
 • AJAX-powered lazy loading of tree branches  
 • Share link support for direct navigation
@@ -49,6 +51,15 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 • PHP 7.4+  
 • Modern web browser with JavaScript enabled
 
+## Translations
+
+Runtime translations are loaded from PHP array files in `resources/lang/`.
+
+Currently included locales:
+`cs`, `da`, `de`, `es`, `fr`, `it`, `nb`, `nl`, `pl`, `pt`, `pt-BR`, `ro`, `ru`, `sv`, `tr`, `uk`
+
+English uses the built-in source strings and does not need a separate language file.
+
 ## Project Structure
 
 ```
@@ -68,7 +79,7 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 ├── Traits/
 │   └── DiagramChartFeature.php     # Chart menu integration
 ├── resources/
-│   ├── lang/                       # Translation files (PHP arrays)
+│   ├── lang/                       # Translation files (PHP arrays, 16 locales)
 │   ├── css/
 │   │   └── navigator.css           # Complete module stylesheet
 │   ├── js/
