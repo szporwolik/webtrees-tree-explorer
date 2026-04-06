@@ -12,6 +12,28 @@
     --sp-radius: 10px;
     position: relative;
     overflow: hidden;
+    display: block;
+    width: 100%;
+    max-width: none;
+}
+
+.sp-full-space {
+    width: 100%;
+    max-width: none;
+}
+
+.wtp-plugin-root.sp-page-view {
+    overflow: visible;
+    width: min(calc(100vw - 16px), 2200px);
+    max-width: none;
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.wtp-plugin-root.sp-page-view .sp-full-space {
+    width: 100%;
+    max-width: none;
 }
 
 .sp-navigator {
@@ -21,6 +43,9 @@
     border: 1px solid #e2e4e8;
     border-radius: var(--sp-radius);
     cursor: grab;
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
 }
 
 .sp-navigator:active {
@@ -1258,8 +1283,10 @@ body:has(.sp-fullview) nav[role="navigation"] {
     display: none !important;
 }
 
-/* Full-space mode — when the form is hidden, fill available height */
+/* Full-space mode — when the form is hidden, fill available width/height */
 .sp-full-space .sp-navigator {
+    width: 100% !important;
+    max-width: none !important;
     height: calc(100vh - 230px) !important;
 }
 
