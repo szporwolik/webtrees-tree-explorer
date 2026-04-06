@@ -150,9 +150,6 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     // Embedded-profile mode metadata
     this.profileView = this.container ? this.container.getAttribute('data-profile-view') === '1' : false;
     this.fullPageUrl = this.container ? this.container.getAttribute('data-full-page-url') || '' : '';
-    if (this.profileView) {
-        this.zoomLevel = 0.85;
-    }
 
     // Expansion history — records each AJAX expansion for share-link replay
     this._expansionHistory = []; // [{type:'lazy'|'ancestor', fid, pid, dir?, lineIndex?}]
