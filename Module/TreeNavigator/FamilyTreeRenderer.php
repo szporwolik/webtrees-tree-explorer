@@ -767,7 +767,7 @@ class FamilyTreeRenderer
 
         // --- Ancestors above (after descendants, see comment above) ---
         if ($direction >= 0) {
-            $this->collectAncestors($person, $nodeId, $throughFamily, $generation);
+            $this->collectAncestors($person, $nodeId, $throughFamily, $generation, $familyObjects);
         }
 
         return $nodeId;
@@ -775,9 +775,12 @@ class FamilyTreeRenderer
 
     /**
      * Collect ancestor nodes for a person.
+     *
+     * @param array<int, Family> $spouseFamilies Display-order spouse families for this node.
      */
     private function collectAncestors(Individual $person, string $childNodeId,
-                                      ?Family $throughFamily, int $generation = 0): void
+                                      ?Family $throughFamily, int $generation = 0,
+                                      array $spouseFamilies = []): void
     {
         $xref = $person->xref();
         $parentFamily = $this->bestParentFamily($person);
@@ -862,9 +865,12 @@ class FamilyTreeRenderer
         }
 
         // Spouse parent families — one ancestor line per spouse family,
-        // using the same marriage-date order as the rendered spouse cards.
-        $spouseFamilies = $person->spouseFamilies()->toArray();
-        usort($spouseFamilies, [$this, 'compareByMarriageDate']);
+        // using exactly the same family list/order as the rendered spouse cards.
+        // This avoids wife-A / wife-B mismatches after gender-swapped rendering.
+        if ($spouseFamilies === []) {
+            $spouseFamilies = $person->spouseFamilies()->toArray();
+            usort($spouseFamilies, [$this, 'compareByMarriageDate']);
+        }
 
         foreach ($spouseFamilies as $spouseFamilyIndex => $spFam) {
             if ($throughFamily instanceof Family && $spFam->xref() !== $throughFamily->xref()) {

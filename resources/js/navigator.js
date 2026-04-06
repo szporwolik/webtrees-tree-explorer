@@ -1902,7 +1902,26 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             return self.getPersonBottomY(layout);
         }
 
-        // Group children by familyIndex (undefined = ancestor or no-family edges)
+        function resolveSourceFamilyIndex(parentNode, edge) {
+            if (!edge || !parentNode || !parentNode.families || parentNode.families.length === 0) {
+                return null;
+            }
+            if (edge.familyIndex !== undefined && edge.familyIndex !== null) {
+                return edge.familyIndex;
+            }
+            if (edge.familyXref) {
+                for (var pfi = 0; pfi < parentNode.families.length; pfi++) {
+                    if (parentNode.families[pfi] && parentNode.families[pfi].familyXref === edge.familyXref) {
+                        return pfi;
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Group children by the actual source family on the parent node.
+        // This keeps ancestor branches for later marriages attached to the
+        // correct couple line instead of falling back to the first one.
         var familyGroups = {};
         var defaultGroup = [];
 
@@ -1910,10 +1929,12 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             var childId = children[ci];
             var edgeKey = parentId + '->' + childId;
             var edge = this.edgeMap[edgeKey];
-            if (edge && edge.familyIndex !== undefined) {
-                var fi = edge.familyIndex;
-                if (!familyGroups[fi]) familyGroups[fi] = [];
-                familyGroups[fi].push({ childId: childId, edge: edge });
+            var sourceFamilyIndex = resolveSourceFamilyIndex(pNode, edge);
+            if (sourceFamilyIndex !== null) {
+                if (!familyGroups[sourceFamilyIndex]) {
+                    familyGroups[sourceFamilyIndex] = [];
+                }
+                familyGroups[sourceFamilyIndex].push({ childId: childId, edge: edge });
             } else {
                 defaultGroup.push({ childId: childId, edge: edge });
             }
