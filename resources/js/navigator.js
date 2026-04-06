@@ -227,6 +227,7 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.initPanZoom();
     this.initToolbar();
     this.initSearch();
+    this._initConnectivityWatch();
 
     // Restore view state from URL — expansions, then zoom/position
     var pendingExp = urlParams.get('exp');
@@ -1294,11 +1295,14 @@ FamilyNavigator.prototype._createPersonInfoSection = function (personData) {
     if (personData.thumb) {
         avatarWrap.href = personData.url;
         avatarWrap.title = personData.name;
+        avatarWrap.classList.add('sp-img-loading');
         var img = document.createElement('img');
         img.className = 'sp-avatar';
-        img.src = personData.thumb;
         img.alt = personData.name;
         img.loading = 'lazy';
+        img.onload = function () { avatarWrap.classList.remove('sp-img-loading'); };
+        img.onerror = function () { avatarWrap.classList.remove('sp-img-loading'); };
+        img.src = personData.thumb;
         avatarWrap.appendChild(img);
     } else {
         avatarWrap.href = personData.url + '#media';
@@ -2547,7 +2551,11 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
     };
     xhr.ontimeout = function () {
         nav.showLoader(false);
-        console.error('SP Tree Explorer: ancestor expand request timed out');
+        nav._showToast('Request timed out \u2014 please try again.');
+    };
+    xhr.onerror = function () {
+        nav.showLoader(false);
+        nav._showToast('Connection error \u2014 please check your network.');
     };
     xhr.send();
 };
@@ -2685,7 +2693,11 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
     };
     xhr.ontimeout = function () {
         nav.showLoader(false);
-        console.error('SP Tree Explorer: navigateTo request timed out');
+        nav._showToast('Request timed out \u2014 please try again.');
+    };
+    xhr.onerror = function () {
+        nav.showLoader(false);
+        nav._showToast('Connection error \u2014 please check your network.');
     };
     xhr.send();
 };
@@ -2720,10 +2732,12 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
     xhr.open('GET', url, true);
     xhr.timeout = 30000;
     xhr.ontimeout = function () {
-        console.warn('SP Tree Explorer: expand request timed out');
         nav.showLoader(false);
-        delete nav.nodeMap[lazyNodeId];
-        nav.measureAndRender();
+        nav._showToast('Request timed out \u2014 please try again.');
+    };
+    xhr.onerror = function () {
+        nav.showLoader(false);
+        nav._showToast('Connection error \u2014 please check your network.');
     };
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
@@ -2744,10 +2758,9 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
                     delete nav.nodeMap[lazyNodeId];
                     nav.measureAndRender();
                 }
-            } else {
-                // HTTP error — remove the lazy node
-                delete nav.nodeMap[lazyNodeId];
-                nav.measureAndRender();
+            } else if (xhr.status !== 0) {
+                // HTTP error — keep node so user can retry
+                nav._showToast('Server error \u2014 please try again.');
             }
         }
     };
@@ -3187,9 +3200,10 @@ FamilyNavigator.prototype.fetchSearchResults = function (query) {
     xhr.open('GET', url, true);
     xhr.timeout = 15000;
     xhr.ontimeout = function () {
-        console.warn('SP Tree Explorer: search request timed out');
-        nav.latestSearchResults = [];
-        nav.renderSearchResults([]);
+        nav._showToast('Search timed out \u2014 please try again.', { type: 'warn' });
+    };
+    xhr.onerror = function () {
+        nav._showToast('Connection error \u2014 search failed.', { type: 'warn' });
     };
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
@@ -3204,9 +3218,7 @@ FamilyNavigator.prototype.fetchSearchResults = function (query) {
                     nav.renderSearchResults([]);
                 }
             } else if (xhr.status !== 0) {
-                console.warn('SP Tree Explorer: search failed with status', xhr.status);
-                nav.latestSearchResults = [];
-                nav.renderSearchResults([]);
+                nav._showToast('Search failed \u2014 please try again.', { type: 'warn' });
             }
         }
     };
@@ -3274,9 +3286,11 @@ FamilyNavigator.prototype.renderSearchResults = function (results) {
 
         if (item.thumb) {
             var thumb = document.createElement('img');
-            thumb.className = 'sp-search-item-thumb';
-            thumb.src = item.thumb;
+            thumb.className = 'sp-search-item-thumb sp-img-loading';
             thumb.alt = '';
+            thumb.onload = function () { this.classList.remove('sp-img-loading'); };
+            thumb.onerror = function () { this.classList.remove('sp-img-loading'); };
+            thumb.src = item.thumb;
             el.appendChild(thumb);
         }
 
@@ -3546,6 +3560,108 @@ FamilyNavigator.prototype.hideOverlay = function () {
 };
 
 // ==========================================================================
+// TOAST NOTIFICATIONS
+// ==========================================================================
+
+/**
+ * Show a transient toast message inside the navigator container.
+ * @param {string} message  - text to display
+ * @param {object} [opts]   - { type: 'error'|'warn'|'info', duration: ms (0=sticky), action: {label,fn} }
+ */
+FamilyNavigator.prototype._showToast = function (message, opts) {
+    opts = opts || {};
+    var type = opts.type || 'error';
+    var duration = opts.duration !== undefined ? opts.duration : 5000;
+
+    var wrap = this.container;
+    if (!wrap) return;
+
+    // Remove existing toast of the same type to avoid stacking
+    var existing = wrap.querySelector('.sp-toast[data-type="' + type + '"]');
+    if (existing) existing.parentNode.removeChild(existing);
+
+    var toast = document.createElement('div');
+    toast.className = 'sp-toast sp-toast-' + type;
+    toast.setAttribute('data-type', type);
+    toast.setAttribute('role', 'alert');
+
+    var icon = type === 'error'
+        ? '<svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'
+        : '<svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+
+    var html = '<span class="sp-toast-icon">' + icon + '</span>'
+        + '<span class="sp-toast-msg">' + message + '</span>';
+
+    if (opts.action) {
+        html += '<button type="button" class="sp-toast-action">' + opts.action.label + '</button>';
+    }
+
+    html += '<button type="button" class="sp-toast-close" aria-label="Close">&times;</button>';
+    toast.innerHTML = html;
+
+    var closeBtn = toast.querySelector('.sp-toast-close');
+    closeBtn.addEventListener('click', function () {
+        toast.classList.add('sp-toast-exit');
+        setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 200);
+    });
+
+    if (opts.action && opts.action.fn) {
+        var actionBtn = toast.querySelector('.sp-toast-action');
+        actionBtn.addEventListener('click', function () {
+            opts.action.fn();
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        });
+    }
+
+    wrap.appendChild(toast);
+
+    // Trigger enter animation
+    requestAnimationFrame(function () { toast.classList.add('sp-toast-visible'); });
+
+    if (duration > 0) {
+        setTimeout(function () {
+            toast.classList.add('sp-toast-exit');
+            setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 200);
+        }, duration);
+    }
+};
+
+/**
+ * Dismiss all toasts of a given type, or all toasts if no type specified.
+ */
+FamilyNavigator.prototype._dismissToast = function (type) {
+    if (!this.container) return;
+    var selector = type ? '.sp-toast[data-type="' + type + '"]' : '.sp-toast';
+    var toasts = this.container.querySelectorAll(selector);
+    for (var i = 0; i < toasts.length; i++) {
+        if (toasts[i].parentNode) toasts[i].parentNode.removeChild(toasts[i]);
+    }
+};
+
+// ==========================================================================
+// OFFLINE DETECTION
+// ==========================================================================
+
+/**
+ * Listen for online/offline events and show a sticky toast when connection is lost.
+ */
+FamilyNavigator.prototype._initConnectivityWatch = function () {
+    var nav = this;
+    this._onOffline = function () {
+        nav._showToast('Connection lost \u2014 please reload the page.', {
+            type: 'error',
+            duration: 0,
+            action: { label: 'Reload', fn: function () { window.location.reload(); } }
+        });
+    };
+    this._onOnline = function () {
+        nav._dismissToast('error');
+    };
+    window.addEventListener('offline', this._onOffline);
+    window.addEventListener('online', this._onOnline);
+};
+
+// ==========================================================================
 // FOCUS PERSON BOX
 // ==========================================================================
 
@@ -3580,8 +3696,11 @@ FamilyNavigator.prototype._updateFocusPersonBox = function () {
     if (displayPerson.thumb) {
         var img = document.createElement('img');
         img.className = 'sp-focus-chip-img';
-        img.src = displayPerson.thumb;
         img.alt = displayPerson.name || '';
+        img.onload = function () { img.style.opacity = '1'; };
+        img.style.opacity = '0';
+        img.style.transition = 'opacity 0.2s';
+        img.src = displayPerson.thumb;
         this.focusAvatar.appendChild(img);
     } else {
         this.focusAvatar.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 1a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-4 0-7 1.8-7 3v1h14v-1c0-1.2-3-3-7-3z" fill="currentColor"/></svg>';
@@ -3784,7 +3903,11 @@ FamilyNavigator.prototype._replayLazyExpand = function (fid, pid, dir, callback)
     xhr.open('GET', url, true);
     xhr.timeout = 30000;
     xhr.ontimeout = function () {
-        console.warn('SP Tree Explorer: replay lazy expand timed out');
+        nav._showToast('Request timed out \u2014 some branches may not have loaded.');
+        callback();
+    };
+    xhr.onerror = function () {
+        nav._showToast('Connection error \u2014 some branches may not have loaded.');
         callback();
     };
     xhr.onreadystatechange = function () {
@@ -3853,7 +3976,11 @@ FamilyNavigator.prototype._replayAncestorExpand = function (fid, pid, lineIndex,
     xhr.open('GET', url, true);
     xhr.timeout = 30000;
     xhr.ontimeout = function () {
-        console.warn('SP Tree Explorer: replay ancestor expand timed out');
+        nav._showToast('Request timed out \u2014 some branches may not have loaded.');
+        callback();
+    };
+    xhr.onerror = function () {
+        nav._showToast('Connection error \u2014 some branches may not have loaded.');
         callback();
     };
     xhr.onreadystatechange = function () {
@@ -3920,6 +4047,11 @@ FamilyNavigator.prototype.destroy = function () {
         clearTimeout(this._searchTimeout);
         this._searchTimeout = null;
     }
+    // Connectivity listeners
+    if (this._onOffline) window.removeEventListener('offline', this._onOffline);
+    if (this._onOnline) window.removeEventListener('online', this._onOnline);
+    // Toasts
+    this._dismissToast();
     // Icon overlay cleanup
     if (this.iconOverlay && this.iconOverlay.parentNode) {
         this.iconOverlay.parentNode.removeChild(this.iconOverlay);

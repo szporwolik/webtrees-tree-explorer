@@ -1639,6 +1639,149 @@ body:has(.sp-fullview) nav[role="navigation"] {
     color: var(--wtp-accent);
 }
 
+/* ======================================================================
+   TOAST NOTIFICATIONS
+   ====================================================================== */
+
+.sp-toast {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%) translateY(12px);
+    opacity: 0;
+    z-index: 300;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    white-space: nowrap;
+    max-width: calc(100% - 40px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    pointer-events: auto;
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.sp-toast-visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.sp-toast-exit {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+}
+
+.sp-toast-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+}
+
+.sp-toast-warn {
+    background: #fffbeb;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+}
+
+.sp-toast-info {
+    background: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #93c5fd;
+}
+
+.sp-toast-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.sp-toast-msg {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sp-toast-action {
+    flex-shrink: 0;
+    background: none;
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.85;
+}
+
+.sp-toast-action:hover {
+    opacity: 1;
+}
+
+.sp-toast-close {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    font-size: 16px;
+    line-height: 1;
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.5;
+    padding: 0 2px;
+}
+
+.sp-toast-close:hover {
+    opacity: 1;
+}
+
+/* ======================================================================
+   IMAGE LOADING PLACEHOLDER
+   ====================================================================== */
+
+.sp-avatar-wrap img {
+    background: #e8eaed;
+}
+
+@keyframes sp-img-pulse {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 0.7; }
+}
+
+.sp-avatar-wrap.sp-img-loading {
+    position: relative;
+    background: #e8eaed;
+}
+
+.sp-avatar-wrap.sp-img-loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #e8eaed 25%, #d1d5db 50%, #e8eaed 75%);
+    background-size: 200% 200%;
+    animation: sp-img-pulse 1.2s ease-in-out infinite;
+}
+
+/* ======================================================================
+   THEME OVERRIDES — TOAST
+   ====================================================================== */
+
+.wtp-plugin-root .sp-toast-error {
+    background: color-mix(in srgb, #ef4444 10%, var(--wtp-bg));
+    color: color-mix(in srgb, #ef4444 70%, var(--wtp-text));
+    border-color: color-mix(in srgb, #ef4444 30%, var(--wtp-border));
+}
+
+.wtp-plugin-root .sp-toast-warn {
+    background: color-mix(in srgb, #f59e0b 10%, var(--wtp-bg));
+    color: color-mix(in srgb, #f59e0b 70%, var(--wtp-text));
+    border-color: color-mix(in srgb, #f59e0b 30%, var(--wtp-border));
+}
+
 .wtp-plugin-root .sp-focus-chip-name {
     color: var(--wtp-text);
 }
