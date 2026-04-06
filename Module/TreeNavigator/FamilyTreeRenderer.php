@@ -221,13 +221,11 @@ class FamilyTreeRenderer
         ]);
 
         $isExpanded = $expanded ? 'true' : 'false';
-        $jsExpandUrl = addcslashes($expandUrl, "'\\");
-        $jsSearchUrl = addcslashes($searchUrl, "'\\");
-        $jsInit = 'wtpInitCSSColors(); var ' . $this->jsHandle . 'Controller = new FamilyNavigator("'
-            . $cardName . '", ' . $isExpanded . ', '
-            . $treeData . ', "'
-            . $jsExpandUrl . '", "'
-            . $jsSearchUrl . '");';
+        $jsInit = 'wtpInitCSSColors(); var ' . $this->jsHandle . 'Controller = new FamilyNavigator('
+            . json_encode($cardName) . ', ' . $isExpanded . ', '
+            . $treeData . ', '
+            . json_encode($expandUrl) . ', '
+            . json_encode($searchUrl) . ');';
 
         return [$html, $jsInit];
     }
@@ -1455,13 +1453,13 @@ class FamilyTreeRenderer
                  'ć'=>'c','č'=>'c','ç'=>'c','è'=>'e','é'=>'e','ê'=>'e','ë'=>'e','ę'=>'e',
                  'ì'=>'i','í'=>'i','î'=>'i','ï'=>'i','ł'=>'l','ñ'=>'n','ń'=>'n',
                  'ò'=>'o','ó'=>'o','ô'=>'o','õ'=>'o','ö'=>'o','ø'=>'o',
-                 'ś'=>'s','š'=>'s','ù'=>'u','ú'=>'u','û'=>'u','ů'=>'u',
+                 'ś'=>'s','š'=>'s','ù'=>'u','ú'=>'u','û'=>'u','ü'=>'u','ů'=>'u',
                  'ý'=>'y','ÿ'=>'y','ź'=>'z','ż'=>'z','ž'=>'z',
                  'À'=>'A','Á'=>'A','Â'=>'A','Ã'=>'A','Ä'=>'A','Å'=>'A','Ą'=>'A',
                  'Ć'=>'C','Č'=>'C','Ç'=>'C','È'=>'E','É'=>'E','Ê'=>'E','Ë'=>'E','Ę'=>'E',
                  'Ì'=>'I','Í'=>'I','Î'=>'I','Ï'=>'I','Ł'=>'L','Ñ'=>'N','Ń'=>'N',
                  'Ò'=>'O','Ó'=>'O','Ô'=>'O','Õ'=>'O','Ö'=>'O','Ø'=>'O',
-                 'Ś'=>'S','Š'=>'S','Ù'=>'U','Ú'=>'U','Û'=>'U','Ů'=>'U',
+                 'Ś'=>'S','Š'=>'S','Ù'=>'U','Ú'=>'U','Û'=>'U','Ü'=>'U','Ů'=>'U',
                  'Ý'=>'Y','Ÿ'=>'Y','Ź'=>'Z','Ż'=>'Z','Ž'=>'Z'];
         return strtr($text, $map);
     }

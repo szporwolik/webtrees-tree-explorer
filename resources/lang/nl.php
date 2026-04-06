@@ -31,7 +31,7 @@ return [
     'Edit family' => 'Gezin bewerken',
     'Edit person' => 'Persoon bewerken',
     'Expand ancestors' => 'Voorouders uitvouwen',
-    'Expand children' => 'Kindereren uitvouwen',
+    'Expand children' => 'Kinderen uitvouwen',
     'Family media:' => 'Gezinsmedia:',
     'Family notes:' => 'Gezinsnotities:',
     'Family sources:' => 'Gezinsbronnen:',

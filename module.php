@@ -14,11 +14,9 @@ namespace SpTreeExplorer\FamilyNav;
 use Fisharebest\Webtrees\Webtrees;
 use Fisharebest\Webtrees\Registry;
 
-// webtrees 2.x only
-if (defined("WT_VERSION")) {
+// webtrees 2.x only — reject webtrees 1.x which defines WT_VERSION
+if (defined('WT_VERSION')) {
     return;
-} else {
-    $version = Webtrees::VERSION;
 }
 
 require_once __DIR__ . '/autoload.php';
