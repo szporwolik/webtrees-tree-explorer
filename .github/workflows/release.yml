@@ -1,14 +1,10 @@
 name: Create Release
 
 on:
-  pull_request:
-    branches: [main]
-    types: [closed]
   workflow_dispatch:
 
 jobs:
   release:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -18,10 +14,45 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Read version
         id: version
         run: echo "version=$(cat latest-version.txt | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes from merged PRs
+        id: notes
+        run: |
+          # Find the previous release tag
+          PREV_TAG=$(git tag --sort=-v:refname | head -n 1)
+          if [ -z "$PREV_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+
+          # Collect merge commits and extract PR numbers
+          NOTES=""
+          for pr in $(git log "$RANGE" --merges --oneline | grep -oP '#\K[0-9]+'); do
+            # Fetch PR title and body via gh CLI
+            PR_DATA=$(gh pr view "$pr" --json title,body --jq '"\(.title)\n\(.body)"' 2>/dev/null || true)
+            if [ -n "$PR_DATA" ]; then
+              PR_TITLE=$(echo "$PR_DATA" | head -n 1)
+              PR_BODY=$(echo "$PR_DATA" | tail -n +2)
+              NOTES="${NOTES}## ${PR_TITLE} (#${pr})\n\n${PR_BODY}\n\n---\n\n"
+            fi
+          done
+
+          # If no merged PRs found, use auto-generated notes
+          if [ -z "$NOTES" ]; then
+            NOTES="Release v${{ steps.version.outputs.version }}"
+          fi
+
+          # Write to file to avoid shell escaping issues
+          echo -e "$NOTES" > release_notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Build release ZIP
         run: |
@@ -33,6 +64,5 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: v${{ steps.version.outputs.version }}
-          body: ${{ github.event.pull_request.body || '' }}
+          body_path: release_notes.md
           files: sp_tree_explorer-${{ steps.version.outputs.version }}.zip
-          generate_release_notes: true
