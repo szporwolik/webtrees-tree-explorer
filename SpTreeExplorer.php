@@ -185,7 +185,7 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
                 'tree'   => $tree->name(),
                 'xref'   => $xref,
             ]),
-            'menu-chart-tree',
+            'menu-sptree',
             ['rel' => 'nofollow']
         );
     }

@@ -5,6 +5,41 @@
  */
 
 /* =====================================================================
+   TOP NAV — icon for the plugin's top-level menu entry
+   =====================================================================
+   Icon themes (webtrees, xenea) set .nav-link::before { display: block }
+   so the icon stacks above the link text.
+   Clouds constrains .nav-link to 22 px with overflow:hidden (icon only).
+   Colors extends clouds but uses 40 px icons.
+   Text-only themes (minimal, fab) get no icon to stay consistent.
+   ===================================================================== */
+
+/* Default: no icon — safe for unknown/third-party themes (noctis, justlight, etc.) */
+.menu-sptree .nav-link::before {
+    content: none;
+}
+
+/* webtrees theme — icon-above-text layout, ~50 px to match native icons */
+.wt-theme-webtrees .menu-sptree .nav-link::before {
+    content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='50' height='50' viewBox='0 0 22 22' fill='none' stroke='%23555' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6.5' y='1' width='9' height='5' rx='1.5'/%3E%3Cpath d='M11 6v3m-7 0h14M4 9v3m14-3v3'/%3E%3Crect x='.5' y='12' width='7' height='5' rx='1.5'/%3E%3Crect x='14.5' y='12' width='7' height='5' rx='1.5'/%3E%3C/svg%3E");
+}
+
+/* xenea theme — icon-above-text layout, ~30 px intrinsic icons */
+.wt-theme-xenea .menu-sptree .nav-link::before {
+    content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 22 22' fill='none' stroke='%23006' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6.5' y='1' width='9' height='5' rx='1.5'/%3E%3Cpath d='M11 6v3m-7 0h14M4 9v3m14-3v3'/%3E%3Crect x='.5' y='12' width='7' height='5' rx='1.5'/%3E%3Crect x='14.5' y='12' width='7' height='5' rx='1.5'/%3E%3C/svg%3E");
+}
+
+/* clouds theme — icon-only 22×22, text hidden by overflow */
+.wt-theme-clouds .menu-sptree .nav-link::before {
+    content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke='%23006' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6.5' y='1' width='9' height='5' rx='1.5'/%3E%3Cpath d='M11 6v3m-7 0h14M4 9v3m14-3v3'/%3E%3Crect x='.5' y='12' width='7' height='5' rx='1.5'/%3E%3Crect x='14.5' y='12' width='7' height='5' rx='1.5'/%3E%3C/svg%3E");
+}
+
+/* colors theme — icon-only 40×40, extends clouds with larger icons */
+.wt-theme-colors .menu-sptree .nav-link::before {
+    content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 22 22' fill='none' stroke='%23555' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6.5' y='1' width='9' height='5' rx='1.5'/%3E%3Cpath d='M11 6v3m-7 0h14M4 9v3m14-3v3'/%3E%3Crect x='.5' y='12' width='7' height='5' rx='1.5'/%3E%3Crect x='14.5' y='12' width='7' height='5' rx='1.5'/%3E%3C/svg%3E");
+}
+
+/* =====================================================================
    VIEWPORT — the main scrollable/draggable container
    ===================================================================== */
 
