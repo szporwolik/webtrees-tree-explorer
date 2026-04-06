@@ -4,10 +4,11 @@ on:
   pull_request:
     branches: [main]
     types: [closed]
+  workflow_dispatch:
 
 jobs:
   release:
-    if: github.event.pull_request.merged == true
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -30,6 +31,6 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: v${{ steps.version.outputs.version }}
-          body: ${{ github.event.pull_request.body }}
+          body: ${{ github.event.pull_request.body || '' }}
           files: sp_tree_explorer-${{ steps.version.outputs.version }}.zip
-          generate_release_notes: false
+          generate_release_notes: true
