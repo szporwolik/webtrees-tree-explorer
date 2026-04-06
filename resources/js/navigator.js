@@ -2343,11 +2343,12 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
 
     // Single child directly below — straight line
     if (targets.length === 1 && Math.abs(targets[0].x - srcX) < 2) {
+        var ty = snap(targets[0].y);
         ctx.beginPath();
         ctx.moveTo(srcX, srcY);
-        ctx.lineTo(srcX, targets[0].y - dotRadius);
+        ctx.lineTo(srcX, ty - dotRadius);
         ctx.stroke();
-        drawDot(srcX, targets[0].y);
+        drawDot(srcX, ty);
         return;
     }
 
@@ -3612,33 +3613,44 @@ FamilyNavigator.prototype._showToast = function (message, opts) {
     toast.setAttribute('data-type', type);
     toast.setAttribute('role', 'alert');
 
-    var icon = type === 'error'
+    var iconSvg = type === 'error'
         ? '<svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'
         : '<svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 
-    var html = '<span class="sp-toast-icon">' + icon + '</span>'
-        + '<span class="sp-toast-msg">' + message + '</span>';
+    var iconSpan = document.createElement('span');
+    iconSpan.className = 'sp-toast-icon';
+    iconSpan.innerHTML = iconSvg; // static SVG — safe
+    toast.appendChild(iconSpan);
+
+    var msgSpan = document.createElement('span');
+    msgSpan.className = 'sp-toast-msg';
+    msgSpan.textContent = message;
+    toast.appendChild(msgSpan);
 
     if (opts.action) {
-        html += '<button type="button" class="sp-toast-action">' + opts.action.label + '</button>';
+        var actionBtn = document.createElement('button');
+        actionBtn.type = 'button';
+        actionBtn.className = 'sp-toast-action';
+        actionBtn.textContent = opts.action.label;
+        if (opts.action.fn) {
+            actionBtn.addEventListener('click', function () {
+                opts.action.fn();
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            });
+        }
+        toast.appendChild(actionBtn);
     }
 
-    html += '<button type="button" class="sp-toast-close" aria-label="Close">&times;</button>';
-    toast.innerHTML = html;
-
-    var closeBtn = toast.querySelector('.sp-toast-close');
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'sp-toast-close';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.innerHTML = '&times;';
     closeBtn.addEventListener('click', function () {
         toast.classList.add('sp-toast-exit');
         setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 200);
     });
-
-    if (opts.action && opts.action.fn) {
-        var actionBtn = toast.querySelector('.sp-toast-action');
-        actionBtn.addEventListener('click', function () {
-            opts.action.fn();
-            if (toast.parentNode) toast.parentNode.removeChild(toast);
-        });
-    }
+    toast.appendChild(closeBtn);
 
     wrap.appendChild(toast);
 

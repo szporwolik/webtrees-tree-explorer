@@ -16,7 +16,7 @@ class NavigatorActionMissing extends Exception
 {
     public function __construct(?string $action = null)
     {
-        $message = I18N::translate('Unknown action:') . ' ' . ($action ?? '(none)');
+        $message = I18N::translate('Unknown action:') . ' ' . e($action ?? '(none)');
         parent::__construct($message);
     }
 }

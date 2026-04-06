@@ -1963,7 +1963,7 @@ body.sp-fullview-active nav[role="navigation"] {
 @supports (content-visibility: auto) {
     .sp-card {
         content-visibility: auto;
-        contain-intrinsic-size: 206px 82px;
+        contain-intrinsic-size: auto 206px auto 82px;
     }
 }
 
