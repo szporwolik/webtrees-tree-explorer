@@ -41,8 +41,13 @@ function wtpInitCSSColors() {
     var root = document.querySelector('.wtp-plugin-root') || document.documentElement;
     var styles = getComputedStyle(root);
 
+    var colorRe = /^#[0-9a-fA-F]{3,8}$|^rgba?\(|^color-mix\(/;
     function readToken(name, fallback) {
         var value = styles.getPropertyValue(name).trim();
+        if (value && !colorRe.test(value)) {
+            console.warn('SP Tree Explorer: ignoring invalid CSS color token', name, value);
+            return fallback;
+        }
         return value || fallback;
     }
 
@@ -2713,6 +2718,13 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
 
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
+    xhr.timeout = 30000;
+    xhr.ontimeout = function () {
+        console.warn('SP Tree Explorer: expand request timed out');
+        nav.showLoader(false);
+        delete nav.nodeMap[lazyNodeId];
+        nav.measureAndRender();
+    };
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
             nav.showLoader(false);
@@ -3173,14 +3185,26 @@ FamilyNavigator.prototype.fetchSearchResults = function (query) {
 
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
+    xhr.timeout = 15000;
+    xhr.ontimeout = function () {
+        console.warn('SP Tree Explorer: search request timed out');
+        nav.latestSearchResults = [];
+        nav.renderSearchResults([]);
+    };
     xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-            try {
-                var results = nav._normalizeSearchResults(xhr.responseText);
-                nav.latestSearchResults = results;
-                nav.renderSearchResults(results);
-            } catch (e) {
-                console.error('SP Tree Explorer: search parse error', e);
+        if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+                try {
+                    var results = nav._normalizeSearchResults(xhr.responseText);
+                    nav.latestSearchResults = results;
+                    nav.renderSearchResults(results);
+                } catch (e) {
+                    console.error('SP Tree Explorer: search parse error', e);
+                    nav.latestSearchResults = [];
+                    nav.renderSearchResults([]);
+                }
+            } else if (xhr.status !== 0) {
+                console.warn('SP Tree Explorer: search failed with status', xhr.status);
                 nav.latestSearchResults = [];
                 nav.renderSearchResults([]);
             }
@@ -3477,6 +3501,7 @@ FamilyNavigator.prototype.focusNode = function (nodeId, focusXref) {
     if (!point) return;
 
     var wrapRect = this.container.getBoundingClientRect();
+    if (wrapRect.width === 0 || wrapRect.height === 0) return;
 
     var targetX = point.x * this.zoomLevel;
     var targetY = point.y * this.zoomLevel;
@@ -3757,6 +3782,11 @@ FamilyNavigator.prototype._replayLazyExpand = function (fid, pid, dir, callback)
 
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
+    xhr.timeout = 30000;
+    xhr.ontimeout = function () {
+        console.warn('SP Tree Explorer: replay lazy expand timed out');
+        callback();
+    };
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
             if (xhr.status === 200 && xhr.responseText) {
@@ -3821,6 +3851,11 @@ FamilyNavigator.prototype._replayAncestorExpand = function (fid, pid, lineIndex,
 
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
+    xhr.timeout = 30000;
+    xhr.ontimeout = function () {
+        console.warn('SP Tree Explorer: replay ancestor expand timed out');
+        callback();
+    };
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
             if (xhr.status === 200 && xhr.responseText) {

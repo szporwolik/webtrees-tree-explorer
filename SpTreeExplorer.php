@@ -287,10 +287,12 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
                     'defaultDetails'          => $this->getPreference('default_details', '1') === '1',
                     'defaultAdvancedControls' => $this->getPreference('default_advanced', '1') === '1',
                     'defaultSources'          => $this->getPreference('default_sources', '0') === '1',
+                    'profileView'             => false,
+                    'fullPageUrl'             => '',
                 ]);
 
-                $emptyTreeData = json_encode(['nodes' => [], 'edges' => [], 'rootId' => null]);
-                $initScript = 'wtpInitCSSColors(); var ' . $prefix . 'Controller = new FamilyNavigator('
+                $emptyTreeData = json_encode(['nodes' => [], 'edges' => [], 'rootId' => null], JSON_HEX_TAG | JSON_HEX_AMP);
+                $initScript = 'wtpInitCSSColors(); var spNavController = new FamilyNavigator('
                     . json_encode($prefix) . ', true, '
                     . $emptyTreeData . ', '
                     . json_encode($expandUrl) . ', '
@@ -372,14 +374,12 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
      */
     public function postAdminAction(ServerRequestInterface $request): ResponseInterface
     {
-        $params = (array) $request->getParsedBody();
-
-        $this->setPreference('default_details', ($params['default_details'] ?? '') === '1' ? '1' : '0');
-        $this->setPreference('default_advanced', ($params['default_advanced'] ?? '') === '1' ? '1' : '0');
-        $this->setPreference('default_sources', ($params['default_sources'] ?? '') === '1' ? '1' : '0');
-        $this->setPreference('profile_default_details', ($params['profile_default_details'] ?? '') === '1' ? '1' : '0');
-        $this->setPreference('profile_default_advanced', ($params['profile_default_advanced'] ?? '') === '1' ? '1' : '0');
-        $this->setPreference('profile_default_sources', ($params['profile_default_sources'] ?? '') === '1' ? '1' : '0');
+        $this->setPreference('default_details', Validator::parsedBody($request)->string('default_details', '') === '1' ? '1' : '0');
+        $this->setPreference('default_advanced', Validator::parsedBody($request)->string('default_advanced', '') === '1' ? '1' : '0');
+        $this->setPreference('default_sources', Validator::parsedBody($request)->string('default_sources', '') === '1' ? '1' : '0');
+        $this->setPreference('profile_default_details', Validator::parsedBody($request)->string('profile_default_details', '') === '1' ? '1' : '0');
+        $this->setPreference('profile_default_advanced', Validator::parsedBody($request)->string('profile_default_advanced', '') === '1' ? '1' : '0');
+        $this->setPreference('profile_default_sources', Validator::parsedBody($request)->string('profile_default_sources', '') === '1' ? '1' : '0');
 
         $message = I18N::translate('The preferences for the module "%s" have been updated.', $this->title());
         FlashMessages::addMessage($message, 'success');

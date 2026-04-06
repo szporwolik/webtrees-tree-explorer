@@ -658,11 +658,6 @@
     display: none;
 }
 
-/* Hide CSS drop for staggered multi-marriage (canvas draws it instead) */
-.sp-couple-line-staggered::after {
-    display: none;
-}
-
 .sp-couple-rings {
     font-size: 24px;
     line-height: 1;
@@ -770,10 +765,6 @@
     border-color: rgba(0, 0, 0, 0.12);
 }
 
-.sp-couple-no-children::after {
-    display: none;
-}
-
 /* =====================================================================
    PERSON CARD
    ===================================================================== */
@@ -788,7 +779,7 @@
     padding: 10px;
     box-shadow: var(--wtp-elevation-card);
     cursor: default;
-    font-family: "Manrope", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     transition: box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     box-sizing: border-box;
     display: flex;
@@ -945,24 +936,6 @@
     background-size: 22px 22px !important;
     background-position: center center !important;
     background-repeat: no-repeat !important;
-}
-
-/* Male silhouette placeholder */
-.sp-avatar-wrap.sp-silhouette-m {
-    background-color: #e0f4f8;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2390cad8'%3E%3Cpath d='M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 10c-4.42 0-8 1.79-8 4v2h16v-2c0-2.21-3.58-4-8-4z'/%3E%3C/svg%3E");
-}
-
-/* Female silhouette placeholder */
-.sp-avatar-wrap.sp-silhouette-f {
-    background-color: #fce4ec;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23e8a0b8'%3E%3Cpath d='M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 10c-4.42 0-8 1.79-8 4v2h16v-2c0-2.21-3.58-4-8-4z'/%3E%3C/svg%3E");
-}
-
-/* Unknown sex silhouette placeholder */
-.sp-avatar-wrap.sp-silhouette-u {
-    background-color: #ecedf0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23a0a4ab'%3E%3Cpath d='M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 10c-4.42 0-8 1.79-8 4v2h16v-2c0-2.21-3.58-4-8-4z'/%3E%3C/svg%3E");
 }
 
 .sp-avatar-wrap img,
@@ -1185,39 +1158,6 @@
     border-color: #22d3ee;
     background: #ecfeff;
     color: #0e7490;
-}
-
-/* =====================================================================
-   ANCESTOR TREE ICON — grows from top of card when ancestors are hidden
-   ===================================================================== */
-
-.sp-ancestor-tree-btn {
-    position: absolute;
-    top: -22px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 22px;
-    height: 22px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    color: #9ca3af;
-    padding: 0;
-    z-index: 2;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    transition: none;
-}
-
-.sp-ancestor-tree-btn:hover {
-    color: #9ca3af;
-    transform: translateX(-50%);
-}
-
-.sp-ancestor-tree-btn svg {
-    width: 14px;
-    height: 14px;
 }
 
 /* Icon overlay — floats over viewport, allows icons above cards */
@@ -1754,111 +1694,6 @@ body:has(.sp-fullview) nav[role="navigation"] {
     color: var(--wtp-link-hover);
     background: rgba(59, 130, 246, 0.10); /* Fallback for html2canvas */
     background: color-mix(in srgb, var(--wtp-accent) 10%, var(--wtp-bg));
-}
-
-/* Generic scoped utility components for plugin expansion */
-.wtp-plugin-root .wtp-card,
-.wtp-plugin-root .wtp-panel,
-.wtp-plugin-root .wtp-surface {
-    background: var(--wtp-bg);
-    color: var(--wtp-text);
-    border: 1px solid var(--wtp-border);
-    border-radius: var(--wtp-radius-md);
-    box-shadow: var(--wtp-shadow-sm);
-}
-
-.wtp-plugin-root .wtp-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.125rem 0.5rem;
-    border: 1px solid var(--wtp-border);
-    border-radius: 999px;
-    background: rgba(59, 130, 246, 0.14); /* Fallback for html2canvas */
-    background: color-mix(in srgb, var(--wtp-accent) 14%, var(--wtp-bg));
-    color: var(--wtp-text);
-}
-
-.wtp-plugin-root .wtp-alert,
-.wtp-plugin-root .wtp-toast {
-    border: 1px solid var(--wtp-border-strong);
-    border-radius: var(--wtp-radius-sm);
-    background: var(--wtp-bg);
-    color: var(--wtp-text);
-    box-shadow: var(--wtp-shadow-sm);
-}
-
-.wtp-plugin-root .wtp-empty,
-.wtp-plugin-root .wtp-error,
-.wtp-plugin-root .wtp-loading {
-    border: 1px dashed var(--wtp-border-strong);
-    border-radius: var(--wtp-radius-md);
-    padding: 0.875rem;
-    background: rgba(255, 255, 255, 0.78); /* Fallback for html2canvas */
-    background: color-mix(in srgb, var(--wtp-bg-elevated) 78%, var(--wtp-bg));
-    color: var(--wtp-text-muted);
-}
-
-/* Tables and lists */
-.wtp-plugin-root .wtp-table-wrap {
-    width: 100%;
-    overflow-x: auto;
-}
-
-.wtp-plugin-root :is(table, .wtp-table) {
-    width: 100%;
-    border-collapse: collapse;
-    color: var(--wtp-text);
-    background: var(--wtp-bg);
-}
-
-.wtp-plugin-root :is(table, .wtp-table) :is(th, td) {
-    border: 1px solid var(--wtp-border);
-    padding: 0.5rem 0.625rem;
-}
-
-.wtp-plugin-root :is(ul, ol).wtp-list,
-.wtp-plugin-root .wtp-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.wtp-plugin-root .wtp-list > * + * {
-    border-top: 1px solid var(--wtp-border);
-}
-
-/* Scoped overlay stack */
-.wtp-plugin-root .wtp-dropdown,
-.wtp-plugin-root .wtp-menu,
-.wtp-plugin-root .dropdown-menu {
-    z-index: 1000;
-}
-
-.wtp-plugin-root .wtp-backdrop,
-.wtp-plugin-root .sp-loading-overlay {
-    z-index: 1040;
-}
-
-.wtp-plugin-root .wtp-modal,
-.wtp-plugin-root .wtp-dialog {
-    z-index: 1050;
-}
-
-.wtp-plugin-root .wtp-tooltip,
-.wtp-plugin-root .wtp-popover {
-    z-index: 1070;
-}
-
-/* Modal/dialog/popover baselines */
-.wtp-plugin-root :is(.wtp-modal, .wtp-dialog, .wtp-popover, .wtp-tooltip) {
-    max-width: min(92vw, 40rem);
-    overflow-wrap: anywhere;
-    background: var(--wtp-bg);
-    color: var(--wtp-text);
-    border: 1px solid var(--wtp-border);
-    border-radius: var(--wtp-radius-md);
-    box-shadow: var(--wtp-shadow-md);
 }
 
 /* Responsive and overflow safety */

@@ -80,7 +80,7 @@ class SpTreeExplorerHandler extends AbstractModule implements RequestHandlerInte
             $json = $renderer->expandNode($targetId, $personId, $tree, $generation);
         }
 
-        return response($json, 200, ['Content-Type' => 'application/json']);
+        return response($json, 200, ['Content-Type' => 'application/json', 'Cache-Control' => 'no-store, private']);
     }
 
     /**
@@ -98,7 +98,7 @@ class SpTreeExplorerHandler extends AbstractModule implements RequestHandlerInte
 
         $json = $renderer->navigateTo($xref, $tree);
 
-        return response($json, 200, ['Content-Type' => 'application/json']);
+        return response($json, 200, ['Content-Type' => 'application/json', 'Cache-Control' => 'no-store, private']);
     }
 
     /**
@@ -116,6 +116,6 @@ class SpTreeExplorerHandler extends AbstractModule implements RequestHandlerInte
         $query = Validator::queryParams($request)->string('q', '');
         $json = $renderer->searchPersons($tree, $prefix, $query);
 
-        return response($json, 200, ['Content-Type' => 'application/json']);
+        return response($json, 200, ['Content-Type' => 'application/json', 'Cache-Control' => 'no-store, private']);
     }
 }

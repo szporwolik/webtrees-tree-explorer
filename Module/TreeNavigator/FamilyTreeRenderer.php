@@ -189,7 +189,7 @@ class FamilyTreeRenderer
             'nodes' => array_values($this->nodes),
             'edges' => $this->edges,
             'rootId' => 'n0',
-        ], JSON_UNESCAPED_UNICODE);
+        ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
 
         $expandUrl = route(SpTreeExplorerHandler::class, [
             'module'   => $this->moduleName,
@@ -1173,7 +1173,7 @@ class FamilyTreeRenderer
             return 0;
         }
 
-        return preg_match_all('/\n\d+\s+' . preg_quote($tag, '/') . '\b/', $gedcom);
+        return preg_match_all('/\n\d+\s+' . preg_quote($tag, '/') . '\b/', $gedcom) ?: 0;
     }
 
     /**
@@ -1277,7 +1277,7 @@ class FamilyTreeRenderer
             'nodes' => array_values($this->nodes),
             'edges' => $this->edges,
             'rootId' => $rootId,
-        ], JSON_UNESCAPED_UNICODE);
+        ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -1303,7 +1303,7 @@ class FamilyTreeRenderer
             'nodes' => array_values($this->nodes),
             'edges' => $this->edges,
             'rootId' => $rootId,
-        ], JSON_UNESCAPED_UNICODE);
+        ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -1359,7 +1359,7 @@ class FamilyTreeRenderer
             'nodes' => array_values($this->nodes),
             'edges' => $this->edges,
             'childRootIds' => $childRootIds,
-        ], JSON_UNESCAPED_UNICODE);
+        ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -1429,7 +1429,7 @@ class FamilyTreeRenderer
             return $aExact <=> $bExact ?: ($aPos ?? 999) <=> ($bPos ?? 999);
         });
 
-        return json_encode($results, JSON_UNESCAPED_UNICODE);
+        return json_encode($results, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
     }
 
     private function pushSearchResult(array &$results, object $row, Tree $tree): void
