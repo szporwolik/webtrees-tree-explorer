@@ -81,6 +81,13 @@
     width: 100%;
     max-width: none;
     box-sizing: border-box;
+
+    /* Gender border color tokens — overridden by .wtp-plugin-root theme layer */
+    --sp-gender-male: #67e8f9;
+    --sp-gender-female: #f9a8d4;
+    --sp-gender-unknown: #d1d5db;
+    --sp-gender-male-accent: #22d3ee;
+    --sp-gender-female-accent: #f472b6;
 }
 
 .sp-navigator:active {
@@ -766,20 +773,6 @@
     border-color: rgba(0, 0, 0, 0.12);
 }
 
-/* Staggered positioning for additional marriages — shift down */
-.sp-couple-line-alt {
-    margin-top: 0;
-}
-
-/* Hide horizontal connector for subsequent marriages — drawn on canvas instead */
-.sp-couple-line-alt::before {
-    display: none;
-}
-
-.sp-couple-line-alt + .sp-card {
-    margin-top: 0;
-}
-
 .sp-couple-no-children::after {
     display: none;
 }
@@ -812,15 +805,15 @@
 
 /* Gender-based full border color */
 .sp-card.sp-male {
-    border-color: #67e8f9;
+    border-color: var(--sp-gender-male);
 }
 
 .sp-card.sp-female {
-    border-color: #f9a8d4;
+    border-color: var(--sp-gender-female);
 }
 
 .sp-card.sp-unknown {
-    border-color: #d1d5db;
+    border-color: var(--sp-gender-unknown);
 }
 
 /* Unknown/placeholder parent card */
@@ -897,12 +890,12 @@
 }
 
 .sp-card.sp-origin.sp-male {
-    border-color: #22d3ee;
+    border-color: var(--sp-gender-male-accent);
     box-shadow: 0 2px 12px rgba(34, 211, 238, 0.25);
 }
 
 .sp-card.sp-origin.sp-female {
-    border-color: #f472b6;
+    border-color: var(--sp-gender-female-accent);
     box-shadow: 0 2px 12px rgba(244, 114, 182, 0.25);
 }
 

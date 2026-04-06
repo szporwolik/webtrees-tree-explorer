@@ -815,6 +815,9 @@ FamilyNavigator.prototype.layoutTree = function () {
     this.layoutMap = {};
 
     var visualRoot = this.findVisualRoot();
+    if (!visualRoot || !this.nodeMap[visualRoot]) {
+        return;
+    }
     this.measureSubtree(visualRoot);
     this.positionSubtree(visualRoot, 0, 0);
 
@@ -1225,7 +1228,6 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
  * Create a single person card DOM element.
  */
 FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
-    var nav = this;
     var genderClass = personData.sex === 'M' ? 'sp-male' : (personData.sex === 'F' ? 'sp-female' : 'sp-unknown');
     var card = document.createElement('div');
     card.className = 'sp-card ' + genderClass + (isOrigin ? ' sp-origin' : '') + (personData.isUnknown ? ' sp-card-unknown' : '') + (personData.isPrivate ? ' sp-card-private' : '');
@@ -1266,7 +1268,16 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         card.appendChild(ribbon);
     }
 
-    // Person info
+    card.appendChild(this._createPersonInfoSection(personData));
+    card.appendChild(this._createCardActions(personData));
+
+    return card;
+};
+
+/**
+ * Build person info section: avatar, name, dates, parent ages at birth.
+ */
+FamilyNavigator.prototype._createPersonInfoSection = function (personData) {
     var person = document.createElement('div');
     person.className = 'sp-person';
 
@@ -1372,9 +1383,14 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     }
 
     person.appendChild(info);
-    card.appendChild(person);
+    return person;
+};
 
-    // Actions row
+/**
+ * Build the actions row for a person card (sources/notes/media links + edit buttons).
+ */
+FamilyNavigator.prototype._createCardActions = function (personData) {
+    var nav = this;
     var actions = document.createElement('div');
     actions.className = 'sp-card-actions';
 
@@ -1481,9 +1497,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     }
 
     actions.appendChild(actionsRight);
-    card.appendChild(actions);
-
-    return card;
+    return actions;
 };
 
 /**
@@ -1921,12 +1935,6 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         ctx.fill();
     }
 
-    // ====================================================================================
-    // PARTNER/SPOUSE CONNECTORS — Horizontal lines at card vertical center
-    // ====================================================================================
-    // Track staggered Y offsets for each family so child forks can originate from correct position
-    var staggeredOffsets = {};  // nodeId -> { familyIndex -> yOffset }
-
     function getFamilyAnchorX(nodeId, layout, familyIndex) {
         var node = self.nodeMap[nodeId];
         var wrapper = self.cardElements[nodeId];
@@ -1950,6 +1958,21 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         }
         return snap(self.getCoupleLineCenterX(layout, familyIndex));
     }
+
+    // Build shared drawing context for sub-methods
+    var dc = { ctx: ctx, snap: snap, drawDot: drawDot, dpr: dpr, snapOffsetDev: snapOffsetDev, R: R, getFamilyAnchorX: getFamilyAnchorX };
+
+    var staggeredOffsets = this._drawPartnerConnectors(dc);
+    this._drawChildForks(dc, staggeredOffsets);
+};
+
+/**
+ * Draw horizontal partner/spouse connectors and vertical couple drops.
+ * Returns staggeredOffsets map: nodeId -> { familyIndex -> yOffset }.
+ */
+FamilyNavigator.prototype._drawPartnerConnectors = function (dc) {
+    var ctx = dc.ctx, snap = dc.snap, drawDot = dc.drawDot;
+    var staggeredOffsets = {};
 
     for (var nodeId in this.layoutMap) {
         var layout = this.layoutMap[nodeId];
@@ -2025,7 +2048,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
                 var lineRect = lineEl.getBoundingClientRect();
                 var dropStartY = snap(connectorY - 1);
                 var dropEndY = snap(layout.y + ((lineRect.bottom - wrapperRect.top) / this.zoomLevel) + offset);
-                var dropX = getFamilyAnchorX(nodeId, layout, fi);
+                var dropX = dc.getFamilyAnchorX(nodeId, layout, fi);
 
                 ctx.beginPath();
                 ctx.moveTo(dropX, dropStartY);
@@ -2033,6 +2056,94 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
                 ctx.stroke();
             }
         }
+    }
+
+    return staggeredOffsets;
+};
+
+/**
+ * Draw parent-to-child fork connectors using staggeredOffsets from partner connectors.
+ */
+FamilyNavigator.prototype._drawChildForks = function (dc, staggeredOffsets) {
+    var ctx = dc.ctx, snap = dc.snap, R = dc.R;
+    var self = this;
+
+    function coupleLineCenterX(nodeId, layout, fi) {
+        return dc.getFamilyAnchorX(nodeId, layout, fi);
+    }
+
+    function coupleLineBottomY(nodeId, layout, fi) {
+        var wrapper = self.cardElements[nodeId];
+        if (wrapper) {
+            var lines = wrapper.querySelectorAll('.sp-couple-line');
+            if (lines[fi]) {
+                var wRect = wrapper.getBoundingClientRect();
+                var lineRect = lines[fi].getBoundingClientRect();
+                return layout.y + ((lineRect.bottom - wRect.top) / self.zoomLevel);
+            }
+        }
+        return self.getPersonBottomY(layout);
+    }
+
+    function resolveSourceFamilyIndex(parentNode, edge) {
+        if (!edge || !parentNode || !parentNode.families || parentNode.families.length === 0) {
+            return null;
+        }
+        if (edge.familyIndex !== undefined && edge.familyIndex !== null) {
+            return edge.familyIndex;
+        }
+        if (edge.familyXref) {
+            for (var pfi = 0; pfi < parentNode.families.length; pfi++) {
+                if (parentNode.families[pfi] && parentNode.families[pfi].familyXref === edge.familyXref) {
+                    return pfi;
+                }
+            }
+        }
+        return null;
+    }
+
+    function targetXForChild(childId, edge) {
+        var cLayout = self.layoutMap[childId];
+        if (!cLayout || cLayout.x === undefined) return null;
+
+        var childNode = self.nodeMap[childId];
+        var tx = cLayout.centerX;
+        var ty = cLayout.y;
+
+        if (childNode && childNode.families && childNode.families.length > 0) {
+            var wrapper = self.cardElements[childId];
+            if (wrapper) {
+                var wRect = wrapper.getBoundingClientRect();
+                var cards = wrapper.querySelectorAll('.sp-card');
+
+                if (edge && edge.lineIndex !== undefined) {
+                    var explicitCardIndex = Math.max(0, edge.lineIndex);
+                    var targetCard = cards[explicitCardIndex] || cards[0];
+                    if (targetCard) {
+                        var cardRect = targetCard.getBoundingClientRect();
+                        tx = cLayout.x + ((cardRect.left + cardRect.width / 2) - wRect.left) / self.zoomLevel;
+                    }
+                } else {
+                    var oxref = childNode.originalChildXref;
+                    var targetCardIndex = 0;
+                    if (oxref && childNode.families) {
+                        for (var cfi = 0; cfi < childNode.families.length; cfi++) {
+                            var cSpouse = childNode.families[cfi].spouse;
+                            if (cSpouse && cSpouse.xref === oxref && cards[cfi + 1]) {
+                                targetCardIndex = cfi + 1;
+                                break;
+                            }
+                        }
+                    }
+                    var targetCard = cards[targetCardIndex] || cards[0];
+                    if (targetCard) {
+                        var cardRect = targetCard.getBoundingClientRect();
+                        tx = cLayout.x + ((cardRect.left + cardRect.width / 2) - wRect.left) / self.zoomLevel;
+                    }
+                }
+            }
+        }
+        return { x: tx, y: ty };
     }
 
     // Draw edges between parent and child nodes
@@ -2046,44 +2157,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         var pNode = this.nodeMap[parentId];
         var srcY = pLayout.y + pLayout.h;
 
-        // Helper functions for connector source and target positions
-        function coupleLineCenterX(nodeId, layout, fi) {
-            return getFamilyAnchorX(nodeId, layout, fi);
-        }
-
-        function coupleLineBottomY(nodeId, layout, fi) {
-            var wrapper = self.cardElements[nodeId];
-            if (wrapper) {
-                var lines = wrapper.querySelectorAll('.sp-couple-line');
-                if (lines[fi]) {
-                    var wRect = wrapper.getBoundingClientRect();
-                    var lineRect = lines[fi].getBoundingClientRect();
-                    return layout.y + ((lineRect.bottom - wRect.top) / self.zoomLevel);
-                }
-            }
-            return self.getPersonBottomY(layout);
-        }
-
-        function resolveSourceFamilyIndex(parentNode, edge) {
-            if (!edge || !parentNode || !parentNode.families || parentNode.families.length === 0) {
-                return null;
-            }
-            if (edge.familyIndex !== undefined && edge.familyIndex !== null) {
-                return edge.familyIndex;
-            }
-            if (edge.familyXref) {
-                for (var pfi = 0; pfi < parentNode.families.length; pfi++) {
-                    if (parentNode.families[pfi] && parentNode.families[pfi].familyXref === edge.familyXref) {
-                        return pfi;
-                    }
-                }
-            }
-            return null;
-        }
-
         // Group children by the actual source family on the parent node.
-        // This keeps ancestor branches for later marriages attached to the
-        // correct couple line instead of falling back to the first one.
         var familyGroups = {};
         var defaultGroup = [];
 
@@ -2100,55 +2174,6 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             } else {
                 defaultGroup.push({ childId: childId, edge: edge });
             }
-        }
-
-        // CRITICAL: Collect all target Y values first to find global minimum
-        // This ensures siblings connect at same Y even if in different groups
-        function targetXForChild(childId, edge) {
-            var cLayout = self.layoutMap[childId];
-            if (!cLayout || cLayout.x === undefined) return null;
-
-            var childNode = self.nodeMap[childId];
-            var tx = cLayout.centerX;  // Default: wrapper center
-            var ty = cLayout.y;        // Card top border (dot appears half-hidden behind card)
-
-            // If child has families, target specific card (person or spouse)
-            if (childNode && childNode.families && childNode.families.length > 0) {
-                var wrapper = self.cardElements[childId];
-                if (wrapper) {
-                    var wRect = wrapper.getBoundingClientRect();
-                    var cards = wrapper.querySelectorAll('.sp-card');
-
-                    if (edge && edge.lineIndex !== undefined) {
-                        // Explicit line index: 0 = person card, 1..n = spouse cards.
-                        var explicitCardIndex = Math.max(0, edge.lineIndex);
-                        var targetCard = cards[explicitCardIndex] || cards[0];
-                        if (targetCard) {
-                            var cardRect = targetCard.getBoundingClientRect();
-                            tx = cLayout.x + ((cardRect.left + cardRect.width / 2) - wRect.left) / self.zoomLevel;
-                        }
-                    } else {
-                        // Implicit: check originalChildXref to determine the correct spouse card.
-                        var oxref = childNode.originalChildXref;
-                        var targetCardIndex = 0;
-                        if (oxref && childNode.families) {
-                            for (var cfi = 0; cfi < childNode.families.length; cfi++) {
-                                var cSpouse = childNode.families[cfi].spouse;
-                                if (cSpouse && cSpouse.xref === oxref && cards[cfi + 1]) {
-                                    targetCardIndex = cfi + 1;
-                                    break;
-                                }
-                            }
-                        }
-                        var targetCard = cards[targetCardIndex] || cards[0];
-                        if (targetCard) {
-                            var cardRect = targetCard.getBoundingClientRect();
-                            tx = cLayout.x + ((cardRect.left + cardRect.width / 2) - wRect.left) / self.zoomLevel;
-                        }
-                    }
-                }
-            }
-            return { x: tx, y: ty };
         }
 
         // Collect all targets and find minimum Y across ALL children
@@ -2191,10 +2216,9 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
                 var barRatio = 0.5;
                 if (familyGroupCount > 1 && fi !== primaryFamilyIndex) {
                     var offsetIdx = Math.max(0, fki - 1);
-                    // Move secondary families upward from the baseline branch.
                     barRatio = Math.max(0.16, 0.30 - offsetIdx * 0.08);
                 }
-                this.drawFork(ctx, srcX, famSrcY, targets, R, barRatio, dpr, snapOffsetDev);
+                this.drawFork(ctx, srcX, famSrcY, targets, R, barRatio, dc.dpr, dc.snapOffsetDev);
             }
         }
 
@@ -2223,7 +2247,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
                 }
             }
             if (targets.length > 0) {
-                this.drawFork(ctx, defSrcX, defSrcY, targets, R, undefined, dpr, snapOffsetDev);
+                this.drawFork(ctx, defSrcX, defSrcY, targets, R, undefined, dc.dpr, dc.snapOffsetDev);
             }
         }
     }
@@ -2496,6 +2520,7 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
 
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
+    xhr.timeout = 30000;
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
             nav.showLoader(false);
@@ -2510,8 +2535,14 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
                 } catch (e) {
                     console.error('SP Tree Explorer: ancestor expand parse error', e);
                 }
+            } else if (xhr.status !== 0) {
+                console.error('SP Tree Explorer: ancestor expand HTTP', xhr.status);
             }
         }
+    };
+    xhr.ontimeout = function () {
+        nav.showLoader(false);
+        console.error('SP Tree Explorer: ancestor expand request timed out');
     };
     xhr.send();
 };
@@ -2612,6 +2643,7 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
 
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
+    xhr.timeout = 30000;
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
             nav.showLoader(false);
@@ -2641,8 +2673,14 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
                 } catch (e) {
                     console.error('SP Tree Explorer: navigate parse error', e);
                 }
+            } else if (xhr.status !== 0) {
+                console.error('SP Tree Explorer: navigateTo HTTP', xhr.status);
             }
         }
+    };
+    xhr.ontimeout = function () {
+        nav.showLoader(false);
+        console.error('SP Tree Explorer: navigateTo request timed out');
     };
     xhr.send();
 };
@@ -2841,7 +2879,7 @@ FamilyNavigator.prototype.initPanZoom = function () {
         nav.container.style.cursor = 'grabbing';
     });
 
-    document.addEventListener('mousemove', function (e) {
+    this._onMouseMove = function (e) {
         if (!isDown) return;
         var dx = e.clientX - startX;
         var dy = e.clientY - startY;
@@ -2851,14 +2889,16 @@ FamilyNavigator.prototype.initPanZoom = function () {
         nav.panX = startPanX + dx;
         nav.panY = startPanY + dy;
         nav.applyTransform();
-    });
+    };
+    document.addEventListener('mousemove', this._onMouseMove);
 
-    document.addEventListener('mouseup', function (e) {
+    this._onMouseUp = function (e) {
         if (dragging) e.preventDefault();
         isDown = false;
         dragging = false;
         if (nav.container) nav.container.style.cursor = '';
-    });
+    };
+    document.addEventListener('mouseup', this._onMouseUp);
 
     // Touch support
     this.container.addEventListener('touchstart', function (e) {
@@ -2872,7 +2912,7 @@ FamilyNavigator.prototype.initPanZoom = function () {
         startPanY = nav.panY;
     }, { passive: true });
 
-    document.addEventListener('touchmove', function (e) {
+    this._onTouchMove = function (e) {
         if (!isDown || e.touches.length !== 1) return;
         var dx = e.touches[0].clientX - startX;
         var dy = e.touches[0].clientY - startY;
@@ -2881,12 +2921,14 @@ FamilyNavigator.prototype.initPanZoom = function () {
         nav.panX = startPanX + dx;
         nav.panY = startPanY + dy;
         nav.applyTransform();
-    }, { passive: true });
+    };
+    document.addEventListener('touchmove', this._onTouchMove, { passive: true });
 
-    document.addEventListener('touchend', function () {
+    this._onTouchEnd = function () {
         isDown = false;
         dragging = false;
-    });
+    };
+    document.addEventListener('touchend', this._onTouchEnd);
 
     // Wheel zoom
     this.container.addEventListener('wheel', function (e) {
@@ -3059,20 +3101,22 @@ FamilyNavigator.prototype.initToolbar = function () {
     }
 
     // Close search panel on Escape
-    document.addEventListener('keydown', function (e) {
+    this._onEscape = function (e) {
         if (e.key === 'Escape' && nav.searchPanel && nav.searchPanel.classList.contains('sp-search-panel-open')) {
             nav.closeSearchPanel();
         }
-    });
+    };
+    document.addEventListener('keydown', this._onEscape);
 
     // Close search panel on click outside
-    document.addEventListener('mousedown', function (e) {
+    this._onClickOutside = function (e) {
         if (nav.searchPanel && nav.searchPanel.classList.contains('sp-search-panel-open')) {
             if (!nav.searchPanel.contains(e.target) && (!nav.focusChip || !nav.focusChip.contains(e.target))) {
                 nav.closeSearchPanel();
             }
         }
-    });
+    };
+    document.addEventListener('mousedown', this._onClickOutside);
 
     // Focus person chip — initial render
     nav._updateFocusPersonBox();
@@ -3184,6 +3228,18 @@ FamilyNavigator.prototype.renderSearchResults = function (results) {
     }
 
     var nav = this;
+
+    // Event delegation — single listener instead of per-item closures
+    if (!this._searchResultsDelegated) {
+        this._searchResultsDelegated = true;
+        this.searchResults.addEventListener('click', function (e) {
+            var item = e.target.closest('.sp-search-item[data-xref]');
+            if (item && item.dataset.xref) {
+                nav._navigateFromSearch(item.dataset.xref);
+            }
+        });
+    }
+
     for (var i = 0; i < results.length; i++) {
         var item = results[i];
 
@@ -3216,13 +3272,6 @@ FamilyNavigator.prototype.renderSearchResults = function (results) {
         }
 
         el.appendChild(info);
-
-        (function(xref) {
-            el.addEventListener('click', function () {
-                nav._navigateFromSearch(xref);
-            });
-        })(item.xref);
-
         this.searchResults.appendChild(el);
     }
 
@@ -3341,17 +3390,21 @@ FamilyNavigator.prototype.copyShareLink = function (btnEl) {
         setTimeout(function () { btnEl.innerHTML = original; }, 1500);
     }).catch(function () {
         // Fallback for older browsers / non-HTTPS
-        var ta = document.createElement('textarea');
-        ta.value = shareUrl;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        var original = btnEl.innerHTML;
-        btnEl.innerHTML = '&#x2705;';
-        setTimeout(function () { btnEl.innerHTML = original; }, 1500);
+        try {
+            var ta = document.createElement('textarea');
+            ta.value = shareUrl;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            var original = btnEl.innerHTML;
+            btnEl.innerHTML = '&#x2705;';
+            setTimeout(function () { btnEl.innerHTML = original; }, 1500);
+        } catch (e) {
+            console.warn('SP Tree Explorer: clipboard copy failed', e);
+        }
     });
 };
 
@@ -3794,5 +3847,33 @@ FamilyNavigator.prototype.toggleFullscreen = function () {
         // Re-sync overlay and re-center after the resize
         nav._syncIconOverlayBounds();
     }, 100);
+};
+
+/**
+ * Clean up all observers, document-level listeners, and detached DOM nodes.
+ * Call before re-creating a FamilyNavigator on the same container.
+ */
+FamilyNavigator.prototype.destroy = function () {
+    // ResizeObserver
+    if (this._containerObserver) {
+        this._containerObserver.disconnect();
+        this._containerObserver = null;
+    }
+    // Document-level pan/zoom handlers
+    if (this._onMouseMove)   document.removeEventListener('mousemove', this._onMouseMove);
+    if (this._onMouseUp)     document.removeEventListener('mouseup', this._onMouseUp);
+    if (this._onTouchMove)   document.removeEventListener('touchmove', this._onTouchMove);
+    if (this._onTouchEnd)    document.removeEventListener('touchend', this._onTouchEnd);
+    // Toolbar document handlers
+    if (this._onEscape)      document.removeEventListener('keydown', this._onEscape);
+    if (this._onClickOutside) document.removeEventListener('mousedown', this._onClickOutside);
+    // Re-parent search panel back (or remove)
+    if (this.searchPanel && this.searchPanel.parentNode === document.body) {
+        this.searchPanel.parentNode.removeChild(this.searchPanel);
+    }
+    // Icon overlay cleanup
+    if (this.iconOverlay && this.iconOverlay.parentNode) {
+        this.iconOverlay.parentNode.removeChild(this.iconOverlay);
+    }
 };
 
