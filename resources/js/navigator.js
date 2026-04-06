@@ -3467,6 +3467,8 @@ FamilyNavigator.prototype._getNodeFocusPoint = function (nodeId, targetXref) {
 
 /**
  * Center the viewport on a specific node.
+ * In profile view the node is placed near the top so descendants are
+ * visible without scrolling (ancestors require panning up).
  */
 FamilyNavigator.prototype.focusNode = function (nodeId, focusXref) {
     if (!this.container) return;
@@ -3480,7 +3482,14 @@ FamilyNavigator.prototype.focusNode = function (nodeId, focusXref) {
     var targetY = point.y * this.zoomLevel;
 
     this.panX = wrapRect.width / 2 - targetX;
-    this.panY = wrapRect.height / 2 - targetY;
+
+    if (this.profileView) {
+        // Place the focused card near the top with a small margin
+        var topMargin = 24;
+        this.panY = topMargin - targetY + (this.CARD_H / 2) * this.zoomLevel;
+    } else {
+        this.panY = wrapRect.height / 2 - targetY;
+    }
     this.applyTransform();
 };
 
