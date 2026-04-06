@@ -59,11 +59,8 @@
 
 .wtp-plugin-root.sp-page-view {
     overflow: visible;
-    width: min(calc(100vw - 16px), 2200px);
+    width: 100%;
     max-width: none;
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%);
 }
 
 .wtp-plugin-root.sp-page-view .sp-full-space {
