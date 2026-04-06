@@ -101,7 +101,7 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 
 ## Contributing
 
-This is a personal project. Issues are welcome, but pull requests are not accepted.
+This is a personal project. Issues are welcome, and pull requests are accepted — please open them against the `dev` branch.
 
 ## License
 
