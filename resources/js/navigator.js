@@ -1,11 +1,11 @@
 /**
  * SP Tree Explorer for webtrees
- * Family Navigator — JSON → Layout → Cards → Canvas connectors
+ * Family Navigator â€” JSON â†’ Layout â†’ Cards â†’ Canvas connectors
  * Copyright (C) 2025-2026 Szymon Porwolik
  */
 
 /**
- * Translation helper — returns translated string from PHP-injected dictionary.
+ * Translation helper â€” returns translated string from PHP-injected dictionary.
  * Supports %s placeholders replaced left-to-right by additional arguments.
  */
 function __(key) {
@@ -40,12 +40,12 @@ var wtpCSSColors = {
 function wtpInitCSSColors() {
     var root = document.querySelector('.wtp-plugin-root') || document.documentElement;
     var styles = getComputedStyle(root);
-    
+
     function readToken(name, fallback) {
         var value = styles.getPropertyValue(name).trim();
         return value || fallback;
     }
-    
+
     wtpCSSColors.ringBrokenFill = readToken('--wtp-ring-broken-fill', '#f1f3f5');
     wtpCSSColors.ringBrokenStroke = readToken('--wtp-ring-broken-stroke', '#c5c9d1');
     wtpCSSColors.divorceLine = readToken('--wtp-divorce-line', '#e74c3c');
@@ -73,7 +73,7 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.canvas         = document.getElementById(cardPrefix + '_canvas');
     this.connCanvas     = document.getElementById(cardPrefix + '_connCanvas');
 
-    // Floating icon overlay — sits outside overflow:hidden container
+    // Floating icon overlay â€” sits outside overflow:hidden container
     this.iconOverlay    = null;
     this.iconCanvas     = null;
     this._createIconOverlay();
@@ -118,7 +118,7 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.panX           = 0;
     this.panY           = 0;
 
-    // Layout constants — match CSS rendered widths exactly for connector precision
+    // Layout constants â€” match CSS rendered widths exactly for connector precision
     this.CARD_W         = 206;  // card width (matches CSS .sp-card width)
     this.CARD_H         = 82;   // approximate card height
     this.COUPLE_GAP     = 36;   // gap between person card and spouse card (couple-line with rings/dates)
@@ -131,7 +131,7 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.LAZY_W         = 192;
     this.LAZY_H         = 36;
 
-    // Layout data — filled by layoutTree()
+    // Layout data â€” filled by layoutTree()
     this.nodeMap        = {};   // id -> node data (from JSON)
     this.layoutMap      = {};   // id -> { x, y, w, h, coupleW } (computed positions)
     this.childrenMap    = {};   // parentId -> [childId, ...]
@@ -139,18 +139,18 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.edgeMap        = {};   // stores edge metadata
 
     // Active ancestor lines (for ancestor switching)
-    this.activeLines    = {};   // nodeId -> lineIndex (0 = self/default, 1 = spouse)
+    this.activeLines    = {};   // nodeId -> lineIndex (0 = self/default, 1..n = spouse families)
 
     // Track the currently displayed root person xref (for share links)
     this.currentRootXref = '';
 
-    // Base person xref — the person the tree was originally loaded for (home button)
+    // Base person xref â€” the person the tree was originally loaded for (home button)
     this.baseXref = this.container ? this.container.getAttribute('data-base-xref') || '' : '';
 
-    // Expansion history — records each AJAX expansion for share-link replay
+    // Expansion history â€” records each AJAX expansion for share-link replay
     this._expansionHistory = []; // [{type:'lazy'|'ancestor', fid, pid, dir?, lineIndex?}]
 
-    // Debug mode — append ?debug=1 to URL to enable console logging
+    // Debug mode â€” append ?debug=1 to URL to enable console logging
     this.debug = (new URL(window.location.href).searchParams.get('debug') === '1');
 
     // Sources visibility state (read from data attribute, default: off)
@@ -197,7 +197,7 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.initToolbar();
     this.initSearch();
 
-    // Restore view state from URL — expansions, then zoom/position
+    // Restore view state from URL â€” expansions, then zoom/position
     var pendingExp = urlParams.get('exp');
     var pendingAnc = urlParams.get('anc');
     var urlZoom = urlParams.get('z');
@@ -220,7 +220,7 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
             self._updateFocusPersonBox();
         });
     } else {
-        // No expansions to replay — restore zoom/position directly
+        // No expansions to replay â€” restore zoom/position directly
         if (hasViewState) {
             this._restoreViewState(parseFloat(urlZoom), parseFloat(urlCx), parseFloat(urlCy));
         } else if (this.startExpanded) {
@@ -260,11 +260,11 @@ FamilyNavigator.prototype._syncIconOverlayBounds = function () {
 };
 
 // ==========================================================================
-// INDEX BUILDING — build adjacency maps from flat node/edge arrays
+// INDEX BUILDING â€” build adjacency maps from flat node/edge arrays
 // ==========================================================================
 
 /**
- * Debug log — only prints when ?debug=1 is in the URL.
+ * Debug log â€” only prints when ?debug=1 is in the URL.
  */
 FamilyNavigator.prototype._dbg = function () {
     if (!this.debug) return;
@@ -371,7 +371,7 @@ FamilyNavigator.prototype._rebuildRelationships = function () {
 };
 
 // ==========================================================================
-// TREE LAYOUT ENGINE — computes x,y for every node
+// TREE LAYOUT ENGINE â€” computes x,y for every node
 //
 // Strategy: bottom-up sizing pass, then top-down positioning pass.
 // The root of the visual tree is the topmost ancestor; origin is somewhere
@@ -714,7 +714,7 @@ FamilyNavigator.prototype.layoutTree = function () {
     this.measureSubtree(visualRoot);
     this.positionSubtree(visualRoot, 0, 0);
 
-    // Position orphaned ancestors — nodes added by in-place ancestor expansion
+    // Position orphaned ancestors â€” nodes added by in-place ancestor expansion
     // on side branches that are not reachable from the visual root's downward walk.
     // Each iteration positions one orphan; the loop cascades upward through chains.
     for (var oIter = 0; oIter < 50; oIter++) {
@@ -748,11 +748,12 @@ FamilyNavigator.prototype.layoutTree = function () {
             var childNode = this.nodeMap[orphanChildId];
             if (childNode && childNode.families && childNode.families.length > 0) {
                 if (orphanEdge.lineIndex === 0) {
-                    // Person side → center above left (person) card
+                    // Person side â†’ center above the main person card.
                     targetCenterX = cLayout.x + this.CARD_W / 2;
                 } else {
-                    // Spouse side → center above right (first spouse) card
-                    targetCenterX = cLayout.x + this.CARD_W + this.COUPLE_GAP + this.CARD_W / 2;
+                    // Spouse side â†’ center above the matching spouse card (1..n).
+                    var cardOffset = orphanEdge.lineIndex * (this.CARD_W + this.COUPLE_GAP);
+                    targetCenterX = cLayout.x + cardOffset + this.CARD_W / 2;
                 }
             }
         }
@@ -781,14 +782,14 @@ FamilyNavigator.prototype.layoutTree = function () {
         }
         if (hasOverlap) {
             if (!orphanEdge || orphanEdge.lineIndex === 0) {
-                // Person/left side — place to the left of all nodes at this Y
+                // Person/left side â€” place to the left of all nodes at this Y
                 var leftMost = Infinity;
                 for (var si = 0; si < sameLevelNodes.length; si++) {
                     if (sameLevelNodes[si].x < leftMost) leftMost = sameLevelNodes[si].x;
                 }
                 targetCenterX = leftMost - this.H_GAP - nW / 2;
             } else {
-                // Spouse/right side — place to the right of all nodes at this Y
+                // Spouse/right side â€” place to the right of all nodes at this Y
                 var rightMost = -Infinity;
                 for (var si = 0; si < sameLevelNodes.length; si++) {
                     var rr = sameLevelNodes[si].x + sameLevelNodes[si].w;
@@ -804,7 +805,7 @@ FamilyNavigator.prototype.layoutTree = function () {
             var pl = this.layoutMap[pe.from];
             return pe.from + '(line=' + pe.lineIndex + ',x=' + (pl && pl.x !== undefined ? Math.round(pl.x) : '?') + ')';
         }.bind(this)).join(' ');
-        this._dbg('layoutOrphan', orphanId, '→child=' + orphanChildId,
+        this._dbg('layoutOrphan', orphanId, 'â†’child=' + orphanChildId,
             'line=' + (orphanEdge ? orphanEdge.lineIndex : 'none'),
             'targetX=' + Math.round(targetCenterX),
             'childX=' + Math.round(cLayout.x), 'childCX=' + Math.round(cLayout.centerX),
@@ -812,7 +813,7 @@ FamilyNavigator.prototype.layoutTree = function () {
             'parents=[' + parentInfo + ']');
 
         // Directly position the orphan node above its positioned child.
-        // Do NOT call positionSubtree — it would recurse and reposition
+        // Do NOT call positionSubtree â€” it would recurse and reposition
         // already-laid-out children, breaking the main layout.
         this.layoutMap[orphanId] = {
             w: nW,
@@ -847,7 +848,7 @@ FamilyNavigator.prototype.layoutTree = function () {
 };
 
 // ==========================================================================
-// RENDER — create HTML cards and draw canvas connectors
+// RENDER â€” create HTML cards and draw canvas connectors
 // ==========================================================================
 
 FamilyNavigator.prototype.render = function () {
@@ -972,14 +973,14 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
                 lineEl.style.marginLeft = this.MULTI_SPOUSE_SEP + 'px';
             }
 
-            // No vertical stagger for multi-marriage — all at same level
+            // No vertical stagger for multi-marriage â€” all at same level
             wrapper.appendChild(lineEl);
 
             var sCard = null;
             if (fam.spouse) {
                 sCard = this.createPersonCard(fam.spouse, false);
             } else {
-                // Family with no spouse record — unknown placeholder
+                // Family with no spouse record â€” unknown placeholder
                 sCard = this.createPersonCard({ sex: 'U', isUnknown: true }, false);
             }
             wrapper.appendChild(sCard);
@@ -987,12 +988,12 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
         }
     }
 
-    // Navigation icons — navigate to person/spouse to re-center tree on them
+    // Navigation icons â€” navigate to person/spouse to re-center tree on them
     var personHasParents = node.personHasParents;
 
     // Check which ancestor connections are actually visible (respecting active line switching)
     var personAncestorsVisible = false;
-    var spouseAncestorsVisible = false;
+    var spouseAncestorsVisible = {};
     var parentEdgesHere = this.parentEdges[node.id] || [];
     for (var ei = 0; ei < parentEdgesHere.length; ei++) {
         var pe = parentEdgesHere[ei];
@@ -1000,18 +1001,27 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
         var parentLayout = this.layoutMap[pe.from];
         if (!parentLayout || parentLayout.x === undefined) continue;
         if (pe.lineIndex !== undefined) {
-            // Ancestor-line edge: lineIndex directly indicates which side
-            if (pe.lineIndex === 1) {
-                spouseAncestorsVisible = true;
-            } else {
+            // Ancestor-line edge: 0 = person side, 1..n = spouse cards in family order.
+            if (pe.lineIndex === 0) {
                 personAncestorsVisible = true;
+            } else {
+                spouseAncestorsVisible[pe.lineIndex] = true;
             }
         } else {
-            // Downward parent-child edge: use originalChildXref to find which side
+            // Downward parent-child edge: use originalChildXref to find which side.
             var oxref = node.originalChildXref;
-            var firstSpouse = (node.families && node.families.length > 0) ? node.families[0].spouse : null;
-            if (oxref && firstSpouse && firstSpouse.xref === oxref) {
-                spouseAncestorsVisible = true;
+            var spouseMatchIndex = -1;
+            if (oxref && node.families) {
+                for (var fmi = 0; fmi < node.families.length; fmi++) {
+                    var candidateSpouse = node.families[fmi].spouse;
+                    if (candidateSpouse && candidateSpouse.xref === oxref) {
+                        spouseMatchIndex = fmi;
+                        break;
+                    }
+                }
+            }
+            if (spouseMatchIndex >= 0) {
+                spouseAncestorsVisible[spouseMatchIndex + 1] = true;
             } else {
                 personAncestorsVisible = true;
             }
@@ -1021,9 +1031,9 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
     this._dbg('ancestorIcons', node.id,
         'person=' + (node.person ? node.person.xref : '?'),
         'pHasParents=' + personHasParents, 'pVis=' + personAncestorsVisible,
-        'sVis=' + spouseAncestorsVisible,
+        'sVis=' + Object.keys(spouseAncestorsVisible).join(','),
         'oxref=' + node.originalChildXref,
-        'spouse0=' + (node.families && node.families.length > 0 && node.families[0].spouse ? node.families[0].spouse.xref : 'none'),
+        'spouses=' + (node.families ? node.families.length : 0),
         'edges=' + parentEdgesHere.length,
         'gen=' + node.generation,
         'swap=' + (node.genderSwapped || false));
@@ -1048,14 +1058,15 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
     }
     for (var si = 0; si < spouseCards.length; si++) {
         var sc = spouseCards[si];
+        var spouseLineIndex = si + 1;
         if (sc.family.spouse && sc.family.spouseHasParents) {
-            if (si === 0 && spouseAncestorsVisible) continue;
+            if (spouseAncestorsVisible[spouseLineIndex]) continue;
             wrapper._ancestorIcons.push({
                 xref: sc.family.spouse.xref, target: 'spouse', index: si,
                 nodeId: node.id,
                 familyXref: sc.family.spouseParentFamilyXref || '',
                 childXref: sc.family.spouse.xref,
-                lineIndex: 1,
+                lineIndex: spouseLineIndex,
                 rebaseOnly: node.generation < 0
             });
         }
@@ -1074,7 +1085,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     card.className = 'sp-card ' + genderClass + (isOrigin ? ' sp-origin' : '') + (personData.isUnknown ? ' sp-card-unknown' : '') + (personData.isPrivate ? ' sp-card-private' : '');
     card.dataset.xref = personData.xref || '';
 
-    // Unknown person — simplified card with ? icon
+    // Unknown person â€” simplified card with ? icon
     if (personData.isUnknown) {
         var person = document.createElement('div');
         person.className = 'sp-person';
@@ -1086,7 +1097,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         return card;
     }
 
-    // Private person — simplified card with lock icon and "Private" label
+    // Private person â€” simplified card with lock icon and "Private" label
     if (personData.isPrivate) {
         var person = document.createElement('div');
         person.className = 'sp-person sp-private-person';
@@ -1113,7 +1124,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     var person = document.createElement('div');
     person.className = 'sp-person';
 
-    // Avatar — link to profile (has photo) or media tab (no photo)
+    // Avatar â€” link to profile (has photo) or media tab (no photo)
     var avatarWrap = document.createElement('a');
     avatarWrap.className = 'sp-avatar-wrap';
     avatarWrap.target = '_blank';
@@ -1144,7 +1155,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     nameLink.target = '_blank';
     nameLink.rel = 'noopener';
     nameLink.setAttribute('aria-label', __('View %s profile', personData.name));
-    
+
     var nameStrong = document.createElement('strong');
     nameStrong.textContent = personData.name;
     nameLink.appendChild(nameStrong);
@@ -1347,7 +1358,7 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
         lineEl.classList.add('sp-couple-line-compact');
     }
 
-    // Make the couple-line area clickable → open family page in new tab
+    // Make the couple-line area clickable â†’ open family page in new tab
     if (familyData.familyUrl) {
         lineEl.style.cursor = 'pointer';
         lineEl.title = __('Open family page');
@@ -1381,8 +1392,8 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
     else tipParts.push(__('Partnership'));
     if (familyData.marriageDate) tipParts.push(__('Marriage:') + ' ' + familyData.marriageDate);
     if (familyData.divorceDate) tipParts.push(__('Divorce:') + ' ' + familyData.divorceDate);
-    if (Number.isFinite(familyData.husbandAgeAtMarriage)) tipParts.push(__('♂ age at marriage:') + ' ' + familyData.husbandAgeAtMarriage);
-    if (Number.isFinite(familyData.wifeAgeAtMarriage)) tipParts.push(__('♀ age at marriage:') + ' ' + familyData.wifeAgeAtMarriage);
+    if (Number.isFinite(familyData.husbandAgeAtMarriage)) tipParts.push(__('â™‚ age at marriage:') + ' ' + familyData.husbandAgeAtMarriage);
+    if (Number.isFinite(familyData.wifeAgeAtMarriage)) tipParts.push(__('â™€ age at marriage:') + ' ' + familyData.wifeAgeAtMarriage);
     if (familyData.marriagePlace) tipParts.push(__('Marriage place:') + ' ' + familyData.marriagePlace);
     if (familyData.divorcePlace) tipParts.push(__('Divorce place:') + ' ' + familyData.divorcePlace);
     if (familyData.durationLabel) tipParts.push(__('Duration:') + ' ' + familyData.durationLabel);
@@ -1521,7 +1532,7 @@ FamilyNavigator.prototype.createCoupleLine = function (familyData, nodeId, famil
             }
         }
     } else {
-        // Unmarried couple — dashed gender-colored circles (partnership)
+        // Unmarried couple â€” dashed gender-colored circles (partnership)
         var heart = document.createElement('span');
         heart.className = 'sp-couple-rings';
         heart.innerHTML = '<svg viewBox="0 0 24 14" width="60" height="36"><circle cx="8" cy="7" r="5" fill="' + wtpCSSColors.ringFemaleFill + '" fill-opacity="0.55" stroke="' + wtpCSSColors.ringFemaleStroke + '" stroke-width="1.6" stroke-dasharray="3 2"/><circle cx="16" cy="7" r="5" fill="' + wtpCSSColors.ringMaleFill + '" fill-opacity="0.55" stroke="' + wtpCSSColors.ringMaleStroke + '" stroke-width="1.6" stroke-dasharray="3 2"/></svg>';
@@ -1585,8 +1596,8 @@ FamilyNavigator.prototype._renderIconOverlay = function (canvasW, canvasH) {
             btn.style.top = iconY + 'px';
 
             if (info.rebaseOnly) {
-                // Descendant node — expanding ancestors would leave the current tree.
-                // Option C: parent–child chain with curved redirect arrow.
+                // Descendant node â€” expanding ancestors would leave the current tree.
+                // Option C: parentâ€“child chain with curved redirect arrow.
                 var rc = cc.connectorLine;
                 btn.className = 'sp-ancestor-expand sp-ancestor-rebase';
                 btn.title = __('Navigate to ancestors');
@@ -1605,7 +1616,7 @@ FamilyNavigator.prototype._renderIconOverlay = function (canvasW, canvasH) {
                     });
                 })(info);
             } else {
-                // Ancestor/origin node — Option D: mini pedigree (2 parents + 1 child).
+                // Ancestor/origin node â€” Option D: mini pedigree (2 parents + 1 child).
                 btn.className = 'sp-ancestor-expand';
                 btn.title = __('Expand ancestors');
                 btn.innerHTML = '<svg viewBox="0 0 60 22" width="67" height="17" aria-hidden="true">'
@@ -1658,7 +1669,7 @@ FamilyNavigator.prototype.createLazyElement = function (node, layout) {
 };
 
 // ==========================================================================
-// GEOMETRY HELPERS — Pure calculations (no DOM measurements)
+// GEOMETRY HELPERS â€” Pure calculations (no DOM measurements)
 // ==========================================================================
 
 /**
@@ -1703,7 +1714,7 @@ FamilyNavigator.prototype.getCoupleLineCenterX = function(layout, familyIndex) {
 };
 
 // ==========================================================================
-// CANVAS CONNECTORS — draw on <canvas> element behind cards
+// CANVAS CONNECTORS â€” draw on <canvas> element behind cards
 // ==========================================================================
 
 FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
@@ -1731,7 +1742,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
 
     // Use theme-portable color from CSS token
     var connectorColor = wtpCSSColors.connectorLine;
-    
+
     ctx.strokeStyle = connectorColor;
     ctx.fillStyle = connectorColor;
     var desiredLineWidth = 2;
@@ -1743,7 +1754,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
     ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
-    
+
     // Use butt caps so line ends don't protrude past endpoints.
     // Rounded appearance is provided by joins and explicit endpoint dots.
     ctx.lineCap = 'butt';
@@ -1764,79 +1775,79 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
     }
 
     // ====================================================================================
-    // PARTNER/SPOUSE CONNECTORS — Horizontal lines at card vertical center
+    // PARTNER/SPOUSE CONNECTORS â€” Horizontal lines at card vertical center
     // ====================================================================================
     // Track staggered Y offsets for each family so child forks can originate from correct position
     var staggeredOffsets = {};  // nodeId -> { familyIndex -> yOffset }
-    
+
     for (var nodeId in this.layoutMap) {
         var layout = this.layoutMap[nodeId];
         if (!layout || layout.x === undefined) continue;
-        
+
         var node = this.nodeMap[nodeId];
         if (!node || !node.families || node.families.length === 0) continue;
-        
+
         var wrapper = this.cardElements[nodeId];
         if (!wrapper) continue;
-        
+
         var wrapperRect = wrapper.getBoundingClientRect();
         var coupleLines = wrapper.querySelectorAll('.sp-couple-line');
         var allCards = wrapper.querySelectorAll('.sp-card');
-        
+
         // Get person card (first card)
         var personCard = allCards[0];
         if (!personCard) continue;
-        
+
         var personCardRect = personCard.getBoundingClientRect();
         // Person's right edge X coordinate
         var personRightX = snap(layout.x + (personCardRect.right - wrapperRect.left) / this.zoomLevel);
-        
+
         // Stagger divorce connectors vertically - each spouse at different Y level
         // Spread up to 5 spouses across wider vertical range for better visual separation
         var familyCount = coupleLines.length;
         var verticalSpacing = familyCount > 1 ? 16 : 0;  // pixels between each spouse connector (increased for better visibility)
         var centerY = this.getPersonCenterY(layout);
-        
+
         // Store offsets for this node's families
         staggeredOffsets[nodeId] = {};
-        
+
         // Draw connector for each family (person to each spouse)
         for (var fi = 0; fi < coupleLines.length; fi++) {
-            // Stagger Y position: center ± offset based on family index
+            // Stagger Y position: center Â± offset based on family index
             var offset = (fi - (familyCount - 1) / 2) * verticalSpacing;
             var connectorY = snap(centerY + offset);
-            
+
             // Store offset for child fork drawing
             staggeredOffsets[nodeId][fi] = offset;
-            
+
             // Keep couple drops rendered on canvas for consistent connector color.
             var lineEl = coupleLines[fi];
             if (lineEl) {
                 lineEl.classList.add('sp-couple-line-staggered');
             }
-            
+
             // Spouse card is at allCards index (fi + 1)
             var spouseCard = allCards[fi + 1];
             if (!spouseCard) continue;
-            
+
             var spouseCardRect = spouseCard.getBoundingClientRect();
             // Spouse's left edge X coordinate
             var spouseLeftX = snap(layout.x + (spouseCardRect.left - wrapperRect.left) / this.zoomLevel);
-            
+
             // Endpoints exactly on card borders (dots are centered here).
             var lineStartX = personRightX;
             var lineEndX = spouseLeftX;
-            
+
             // Draw straight horizontal connector between person and spouse
             ctx.beginPath();
             ctx.moveTo(lineStartX, connectorY);
             ctx.lineTo(lineEndX, connectorY);
             ctx.stroke();
-            
+
             // Draw anchor dots centered on card borders (half-hidden by cards)
             drawDot(personRightX, connectorY);
             drawDot(spouseLeftX, connectorY);
-            
+
             // Draw vertical couple drop on canvas for all families.
             // Skip families marked with no children.
             if (lineEl && !lineEl.classList.contains('sp-couple-no-children')) {
@@ -1894,7 +1905,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         // Group children by familyIndex (undefined = ancestor or no-family edges)
         var familyGroups = {};
         var defaultGroup = [];
-        
+
         for (var ci = 0; ci < children.length; ci++) {
             var childId = children[ci];
             var edgeKey = parentId + '->' + childId;
@@ -1913,33 +1924,40 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         function targetXForChild(childId, edge) {
             var cLayout = self.layoutMap[childId];
             if (!cLayout || cLayout.x === undefined) return null;
-            
+
             var childNode = self.nodeMap[childId];
             var tx = cLayout.centerX;  // Default: wrapper center
             var ty = cLayout.y;        // Card top border (dot appears half-hidden behind card)
-            
+
             // If child has families, target specific card (person or spouse)
             if (childNode && childNode.families && childNode.families.length > 0) {
                 var wrapper = self.cardElements[childId];
                 if (wrapper) {
                     var wRect = wrapper.getBoundingClientRect();
                     var cards = wrapper.querySelectorAll('.sp-card');
-                    
+
                     if (edge && edge.lineIndex !== undefined) {
-                        // Explicit line index: 0 = person card, 1 = first spouse card
-                        var targetCard = cards[edge.lineIndex === 1 ? 1 : 0];
+                        // Explicit line index: 0 = person card, 1..n = spouse cards.
+                        var explicitCardIndex = Math.max(0, edge.lineIndex);
+                        var targetCard = cards[explicitCardIndex] || cards[0];
                         if (targetCard) {
                             var cardRect = targetCard.getBoundingClientRect();
                             tx = cLayout.x + ((cardRect.left + cardRect.width / 2) - wRect.left) / self.zoomLevel;
                         }
                     } else {
-                        // Implicit: check originalChildXref to determine target
+                        // Implicit: check originalChildXref to determine the correct spouse card.
                         var oxref = childNode.originalChildXref;
-                        var cFirstSpouse = childNode.families[0].spouse;
-                        var targetCard = cards[0]; // Default to person card
-                        if (oxref && cFirstSpouse && cFirstSpouse.xref === oxref && cards[1]) {
-                            targetCard = cards[1]; // Use spouse card
+                        var targetCardIndex = 0;
+                        if (oxref && childNode.families) {
+                            for (var cfi = 0; cfi < childNode.families.length; cfi++) {
+                                var cSpouse = childNode.families[cfi].spouse;
+                                if (cSpouse && cSpouse.xref === oxref && cards[cfi + 1]) {
+                                    targetCardIndex = cfi + 1;
+                                    break;
+                                }
+                            }
                         }
+                        var targetCard = cards[targetCardIndex] || cards[0];
                         if (targetCard) {
                             var cardRect = targetCard.getBoundingClientRect();
                             tx = cLayout.x + ((cardRect.left + cardRect.width / 2) - wRect.left) / self.zoomLevel;
@@ -1949,7 +1967,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             }
             return { x: tx, y: ty };
         }
-        
+
         // Collect all targets and find minimum Y across ALL children
         var minGlobalY = Infinity;
         for (var ci = 0; ci < children.length; ci++) {
@@ -1962,7 +1980,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             }
         }
 
-        // Draw forks per family group — stagger bar heights so they don't overlap
+        // Draw forks per family group â€” stagger bar heights so they don't overlap
         var familyKeys = Object.keys(familyGroups).map(function (k) { return parseInt(k, 10); }).sort(function (a, b) { return a - b; });
         var familyGroupCount = familyKeys.length;
         var primaryFamilyIndex = familyGroupCount > 0 ? familyKeys[0] : -1;
@@ -1971,12 +1989,12 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             var items = familyGroups[fi];
             var srcX = coupleLineCenterX(parentId, pLayout, fi);
             var famSrcY = coupleLineBottomY(parentId, pLayout, fi) + this.FORK_SOURCE_OFFSET;
-            
+
             // Add staggered offset from spouse connectors so forks originate from staggered positions
             if (staggeredOffsets[parentId] && staggeredOffsets[parentId][fi] !== undefined) {
                 famSrcY += staggeredOffsets[parentId][fi];
             }
-            
+
             var targets = [];
             for (var gi = 0; gi < items.length; gi++) {
                 var t = targetXForChild(items[gi].childId, items[gi].edge);
@@ -2004,7 +2022,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             if (pNode && pNode.families && pNode.families.length > 0) {
                 defSrcX = coupleLineCenterX(parentId, pLayout, 0);
                 defSrcY = coupleLineBottomY(parentId, pLayout, 0) + this.FORK_SOURCE_OFFSET;
-                
+
                 // Add staggered offset from first spouse connector
                 if (staggeredOffsets[parentId] && staggeredOffsets[parentId][0] !== undefined) {
                     defSrcY += staggeredOffsets[parentId][0];
@@ -2090,7 +2108,7 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
         ctx.fill();
     }
 
-    // Single child directly below — straight line
+    // Single child directly below â€” straight line
     if (targets.length === 1 && Math.abs(targets[0].x - srcX) < 2) {
         ctx.beginPath();
         ctx.moveTo(srcX, srcY);
@@ -2100,7 +2118,7 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
         return;
     }
 
-    // Single child offset — L-shape with rounded corners (arcTo for consistency)
+    // Single child offset â€” L-shape with rounded corners (arcTo for consistency)
     if (targets.length === 1) {
         var tx = snap(targets[0].x);
         var ty = snap(targets[0].y);
@@ -2133,7 +2151,7 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
         return;
     }
 
-    // Multiple children — draw one shared fork (trunk + bar + drops).
+    // Multiple children â€” draw one shared fork (trunk + bar + drops).
     // This avoids re-drawing overlapping paths for each child, which can
     // look like "spaghetti" on dense trees with multiple families.
     targets.sort(function (a, b) { return a.x - b.x; });
@@ -2260,7 +2278,7 @@ FamilyNavigator.prototype._getKnownXrefs = function () {
 };
 
 /**
- * Expand ancestor branch in-place — fetch and merge ancestor data
+ * Expand ancestor branch in-place â€” fetch and merge ancestor data
  * without rebasing the whole tree.
  */
 FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyXref, childXref, lineIndex) {
@@ -2268,11 +2286,12 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
 
     this._dbg('expandAncestorInPlace', childNodeId, 'fam=' + familyXref, 'child=' + childXref, 'line=' + lineIndex);
 
-    // If ancestors for this line are already loaded (but hidden), just switch to them
+    // If ancestors for this exact line/family are already loaded (but hidden), just switch to them.
     var existingEdges = this.parentEdges[childNodeId] || [];
     for (var i = 0; i < existingEdges.length; i++) {
-        if (existingEdges[i].lineIndex === lineIndex) {
-            this._dbg('expandAncestorInPlace → already loaded, switching line');
+        var existingEdge = existingEdges[i];
+        if (existingEdge.lineIndex === lineIndex && existingEdge.familyXref === familyXref) {
+            this._dbg('expandAncestorInPlace â†’ already loaded, switching line');
             this.activeLines[childNodeId] = lineIndex;
             this.measureAndRender();
             this.focusNode(childNodeId);
@@ -2301,9 +2320,9 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
                 try {
                     var newData = JSON.parse(xhr.responseText);
                     if (newData.nodes && newData.nodes.length > 0) {
-                        nav._dbg('expandAncestorInPlace → received', newData.nodes.length, 'nodes, rootId=' + newData.rootId);
+                        nav._dbg('expandAncestorInPlace â†’ received', newData.nodes.length, 'nodes, rootId=' + newData.rootId);
                         nav._expansionHistory.push({ type: 'ancestor', fid: familyXref, pid: childXref, lineIndex: lineIndex });
-                        nav._mergeAncestorData(childNodeId, newData, lineIndex);
+                        nav._mergeAncestorData(childNodeId, newData, lineIndex, familyXref);
                     }
                 } catch (e) {
                     console.error('SP Tree Explorer: ancestor expand parse error', e);
@@ -2318,7 +2337,7 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
  * Merge fetched ancestor data into the existing tree, connecting
  * the new subtree root to the given child node.
  */
-FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, lineIndex) {
+FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, lineIndex, familyXref) {
     this._dbg('_mergeAncestorData', childNodeId, 'rootId=' + newData.rootId, 'line=' + lineIndex,
         'nodes=' + newData.nodes.length, 'edges=' + (newData.edges ? newData.edges.length : 0),
         'parentEdgesBefore=' + (this.parentEdges[childNodeId] ? this.parentEdges[childNodeId].length : 0));
@@ -2343,7 +2362,8 @@ FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, l
             to: childNodeId,
             type: 'parent-child',
             line: lineIndex === 0 ? 'self' : 'spouse',
-            lineIndex: lineIndex
+            lineIndex: lineIndex,
+            familyXref: familyXref || ''
         };
         var connectKey = newData.rootId + '->' + childNodeId;
         this.edgeMap[connectKey] = connectEdge;
@@ -2352,7 +2372,7 @@ FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, l
     }
 
     // Full rebuild of childrenMap / parentEdges from edgeMap (with sorting)
-    // to guarantee consistent state — avoids duplicate entries from
+    // to guarantee consistent state â€” avoids duplicate entries from
     // successive ancestor expansions.
     this._rebuildRelationships();
 
@@ -2393,7 +2413,7 @@ FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, l
 };
 
 /**
- * Navigate to a new person — reload the entire tree centered on them.
+ * Navigate to a new person â€” reload the entire tree centered on them.
  * This is the primary navigation mechanism for exploring large genealogies.
  */
 FamilyNavigator.prototype.navigateTo = function (xref) {
@@ -2417,7 +2437,7 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
                     var newData = JSON.parse(xhr.responseText);
                     if (newData.nodes && newData.nodes.length > 0) {
                         // Replace the entire tree
-                        nav._dbg('navigateTo → received', newData.nodes.length, 'nodes, rootId=' + newData.rootId);
+                        nav._dbg('navigateTo â†’ received', newData.nodes.length, 'nodes, rootId=' + newData.rootId);
                         nav.treeData = newData;
                         nav.activeLines = {};
                         nav._expansionHistory = [];
@@ -2445,7 +2465,7 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
 };
 
 // ==========================================================================
-// LAZY EXPANSION — AJAX load subtree
+// LAZY EXPANSION â€” AJAX load subtree
 // ==========================================================================
 
 FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
@@ -2482,7 +2502,7 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
                         nav._expansionHistory.push({ type: 'lazy', fid: fid, pid: pid, dir: direction });
                         nav.mergeLazyData(lazyNodeId, newData);
                     } else {
-                        // Empty response — remove the lazy node silently
+                        // Empty response â€” remove the lazy node silently
                         delete nav.nodeMap[lazyNodeId];
                         nav.measureAndRender();
                     }
@@ -2492,7 +2512,7 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
                     nav.measureAndRender();
                 }
             } else {
-                // HTTP error — remove the lazy node
+                // HTTP error â€” remove the lazy node
                 delete nav.nodeMap[lazyNodeId];
                 nav.measureAndRender();
             }
@@ -2544,7 +2564,7 @@ FamilyNavigator.prototype.mergeLazyData = function (lazyNodeId, newData) {
             this.edgeMap[edge.from + '->' + edge.to] = edge;
         }
 
-        // 4. Create parent → child-root edges (preserving familyIndex)
+        // 4. Create parent â†’ child-root edges (preserving familyIndex)
         if (parentId && newData.childRootIds) {
             var familyIndex = (oldEdge && oldEdge.familyIndex !== undefined) ? oldEdge.familyIndex : 0;
             for (var i = 0; i < newData.childRootIds.length; i++) {
@@ -2828,7 +2848,7 @@ FamilyNavigator.prototype.initToolbar = function () {
         });
     }
 
-    // Focus chip — click to open search panel
+    // Focus chip â€” click to open search panel
     if (this.focusChip) {
         this.focusChip.addEventListener('click', function () {
             nav.openSearchPanel();
@@ -2864,12 +2884,12 @@ FamilyNavigator.prototype.initToolbar = function () {
         }
     });
 
-    // Focus person chip — initial render
+    // Focus person chip â€” initial render
     nav._updateFocusPersonBox();
 };
 
 // ==========================================================================
-// SEARCH — person autocomplete and navigation
+// SEARCH â€” person autocomplete and navigation
 // ==========================================================================
 
 FamilyNavigator.prototype.initSearch = function () {
@@ -2896,7 +2916,7 @@ FamilyNavigator.prototype.initSearch = function () {
         }, 300);
     });
 
-    // Enter key in search input — navigate to first result or selected
+    // Enter key in search input â€” navigate to first result or selected
     this.searchInput.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter') return;
 
@@ -2913,7 +2933,7 @@ FamilyNavigator.prototype.initSearch = function () {
 
 FamilyNavigator.prototype.fetchSearchResults = function (query) {
     var nav = this;
-    var url = this.searchUrl 
+    var url = this.searchUrl
         + '&instance=' + encodeURIComponent(this.cardPrefix)
         + '&q=' + encodeURIComponent(query);
 
@@ -3036,7 +3056,7 @@ FamilyNavigator.prototype._setCurrentXref = function (targetXref) {
         for (var fi = 0; fi < rootNode.families.length; fi++) {
             if (rootNode.families[fi].spouse && rootNode.families[fi].spouse.xref === targetXref) {
                 this.currentRootXref = targetXref;
-                this.activeLines[this.treeData.rootId] = 1;
+                this.activeLines[this.treeData.rootId] = fi + 1;
                 break;
             }
         }
@@ -3052,7 +3072,7 @@ FamilyNavigator.prototype.copyShareLink = function (btnEl) {
     if (this.currentRootXref) {
         url.searchParams.set('xref', this.currentRootXref);
     }
-    // Toggle states — always explicit so recipient sees sender's exact view
+    // Toggle states â€” always explicit so recipient sees sender's exact view
     url.searchParams.set('sources', this.showSources ? '1' : '0');
     url.searchParams.set('details', this.showDetails ? '1' : '0');
     url.searchParams.set('advanced', this.showAdvancedControls ? '1' : '0');
@@ -3069,7 +3089,7 @@ FamilyNavigator.prototype.copyShareLink = function (btnEl) {
         url.searchParams.set('cy', Math.round(cy));
     }
 
-    // Expansion history — lazy expansions
+    // Expansion history â€” lazy expansions
     var lazyParts = [];
     var ancParts = [];
     for (var i = 0; i < this._expansionHistory.length; i++) {
@@ -3094,7 +3114,7 @@ FamilyNavigator.prototype.copyShareLink = function (btnEl) {
     var shareUrl = url.toString();
 
     navigator.clipboard.writeText(shareUrl).then(function () {
-        // Brief visual feedback — swap icon to checkmark
+        // Brief visual feedback â€” swap icon to checkmark
         var original = btnEl.innerHTML;
         btnEl.innerHTML = '&#x2705;';
         setTimeout(function () { btnEl.innerHTML = original; }, 1500);
@@ -3231,7 +3251,7 @@ FamilyNavigator.prototype._updateToolbarState = function (hasTree) {
 };
 
 // ==========================================================================
-// SEARCH PANEL — open / close / navigate
+// SEARCH PANEL â€” open / close / navigate
 // ==========================================================================
 
 FamilyNavigator.prototype.openSearchPanel = function () {
@@ -3447,7 +3467,8 @@ FamilyNavigator.prototype._replayAncestorExpand = function (fid, pid, lineIndex,
     // Check if already expanded for this line
     var existingEdges = this.parentEdges[childNodeId] || [];
     for (var i = 0; i < existingEdges.length; i++) {
-        if (existingEdges[i].lineIndex === lineIndex) {
+        var existingEdge = existingEdges[i];
+        if (existingEdge.lineIndex === lineIndex && existingEdge.familyXref === fid) {
             this.activeLines[childNodeId] = lineIndex;
             this.measureAndRender();
             callback();
@@ -3474,7 +3495,7 @@ FamilyNavigator.prototype._replayAncestorExpand = function (fid, pid, lineIndex,
                     var newData = JSON.parse(xhr.responseText);
                     if (newData.nodes && newData.nodes.length > 0) {
                         nav._expansionHistory.push({ type: 'ancestor', fid: fid, pid: pid, lineIndex: lineIndex });
-                        nav._mergeAncestorData(childNodeId, newData, lineIndex);
+                        nav._mergeAncestorData(childNodeId, newData, lineIndex, fid);
                     }
                 } catch (e) {
                     console.error('SP Tree Explorer: replay ancestor parse error', e);
