@@ -359,6 +359,20 @@ FamilyNavigator.prototype.buildIndex = function (data) {
         });
     }
 
+    // Mark nodes that have multiple ancestor lines (different lineIndex values
+    // among their parent edges) so getVisibleChildren can filter correctly.
+    for (var childId in this.parentEdges) {
+        var pe = this.parentEdges[childId];
+        var lineIndices = {};
+        for (var ei = 0; ei < pe.length; ei++) {
+            if (pe[ei].lineIndex !== undefined) lineIndices[pe[ei].lineIndex] = true;
+        }
+        if (Object.keys(lineIndices).length > 1) {
+            var cn = this.nodeMap[childId];
+            if (cn) cn.hasMultipleAncestorLines = true;
+        }
+    }
+
     this._dbg('buildIndex', 'nodes=' + data.nodes.length, 'edges=' + data.edges.length, 'rootId=' + data.rootId);
 };
 
