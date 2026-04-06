@@ -11,6 +11,9 @@ use Fisharebest\Webtrees\I18N;
  * @var string $defaultDetails
  * @var string $defaultAdvanced
  * @var string $defaultSources
+ * @var string $profileDefaultDetails
+ * @var string $profileDefaultAdvanced
+ * @var string $profileDefaultSources
  */
 
 ?>
@@ -61,6 +64,58 @@ use Fisharebest\Webtrees\I18N;
                 <input class="form-check-input" type="checkbox" id="default_sources" name="default_sources" value="1"
                     <?= $defaultSources === '1' ? 'checked' : '' ?>>
                 <label class="form-check-label" for="default_sources">
+                    <?= I18N::translate('Show source, note, and media count badges on person cards and marriage chips by default.') ?>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <hr>
+
+    <h3><?= I18N::translate('Profile tab defaults') ?></h3>
+    <p class="text-muted">
+        <?= I18N::translate('These settings apply when Tree Explorer is opened as a tab on an individual profile page.') ?>
+    </p>
+
+    <div class="row mb-3">
+        <label class="col-sm-3 col-form-label">
+            <?= I18N::translate('Show details by default (profile tab)') ?>
+        </label>
+        <div class="col-sm-9">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="profile_default_details" name="profile_default_details" value="1"
+                    <?= $profileDefaultDetails === '1' ? 'checked' : '' ?>>
+                <label class="form-check-label" for="profile_default_details">
+                    <?= I18N::translate('Show dates, places, markers, and marriage information on the tree by default.') ?>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <label class="col-sm-3 col-form-label">
+            <?= I18N::translate('Show advanced controls by default (profile tab)') ?>
+        </label>
+        <div class="col-sm-9">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="profile_default_advanced" name="profile_default_advanced" value="1"
+                    <?= $profileDefaultAdvanced === '1' ? 'checked' : '' ?>>
+                <label class="form-check-label" for="profile_default_advanced">
+                    <?= I18N::translate('Show action buttons (sources, notes, media, add note, edit family) on person cards by default.') ?>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <label class="col-sm-3 col-form-label">
+            <?= I18N::translate('Show sources by default (profile tab)') ?>
+        </label>
+        <div class="col-sm-9">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="profile_default_sources" name="profile_default_sources" value="1"
+                    <?= $profileDefaultSources === '1' ? 'checked' : '' ?>>
+                <label class="form-check-label" for="profile_default_sources">
                     <?= I18N::translate('Show source, note, and media count badges on person cards and marriage chips by default.') ?>
                 </label>
             </div>

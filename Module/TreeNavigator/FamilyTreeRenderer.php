@@ -71,6 +71,12 @@ class FamilyTreeRenderer
     /** @var bool Default state for the Sources toggle */
     private bool $defaultSources = false;
 
+    /** @var bool Whether the viewport is rendered inside the individual profile tab */
+    private bool $profileView = false;
+
+    /** @var string URL of the standalone full-page chart view */
+    private string $fullPageUrl = '';
+
     public function __construct(string $prefix, string $moduleName, Tree $tree, string $rootXref, string $moduleVersion = '')
     {
         $this->prefix     = $prefix;
@@ -85,6 +91,18 @@ class FamilyTreeRenderer
         $this->defaultDetails = $details;
         $this->defaultAdvancedControls = $advancedControls;
         $this->defaultSources = $sources;
+    }
+
+    public function setGenerationLimits(int $maxUp, int $maxDown): void
+    {
+        $this->maxGenUp = $maxUp;
+        $this->maxGenDown = $maxDown;
+    }
+
+    public function setProfileTabOptions(bool $profileView, string $fullPageUrl = ''): void
+    {
+        $this->profileView = $profileView;
+        $this->fullPageUrl = $fullPageUrl;
     }
 
     /**
@@ -198,6 +216,8 @@ class FamilyTreeRenderer
             'defaultDetails'          => $this->defaultDetails,
             'defaultAdvancedControls' => $this->defaultAdvancedControls,
             'defaultSources'          => $this->defaultSources,
+            'profileView'             => $this->profileView,
+            'fullPageUrl'             => $this->fullPageUrl,
         ]);
 
         $isExpanded = $expanded ? 'true' : 'false';

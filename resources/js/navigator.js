@@ -147,11 +147,40 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     // Base person xref — the person the tree was originally loaded for (home button)
     this.baseXref = this.container ? this.container.getAttribute('data-base-xref') || '' : '';
 
+    // Embedded-profile mode metadata
+    this.profileView = this.container ? this.container.getAttribute('data-profile-view') === '1' : false;
+    this.fullPageUrl = this.container ? this.container.getAttribute('data-full-page-url') || '' : '';
+    if (this.profileView) {
+        this.zoomLevel = 0.85;
+    }
+
     // Expansion history — records each AJAX expansion for share-link replay
     this._expansionHistory = []; // [{type:'lazy'|'ancestor', fid, pid, dir?, lineIndex?}]
 
     // Debug mode — append ?debug=1 to URL to enable console logging
     this.debug = (new URL(window.location.href).searchParams.get('debug') === '1');
+
+    // Re-render when a hidden container becomes visible (e.g. profile-page tab).
+    this._lastContainerSize = { width: 0, height: 0 };
+    if (this.container && typeof ResizeObserver !== 'undefined') {
+        this._containerObserver = new ResizeObserver(function (entries) {
+            for (var i = 0; i < entries.length; i++) {
+                var rect = entries[i].contentRect;
+                var wasHidden = nav._lastContainerSize.width === 0 || nav._lastContainerSize.height === 0;
+                nav._lastContainerSize = { width: rect.width, height: rect.height };
+                if (rect.width > 0 && rect.height > 0 && wasHidden) {
+                    window.requestAnimationFrame(function () {
+                        nav.measureAndRender();
+                        nav._setCurrentXref(nav.baseXref || null);
+                        if (nav.startExpanded) {
+                            nav.focusOrigin();
+                        }
+                    });
+                }
+            }
+        });
+        this._containerObserver.observe(this.container);
+    }
 
     // Sources visibility state (read from data attribute, default: off)
     var defaultSources = this.container ? this.container.getAttribute('data-default-sources') : '0';
@@ -966,11 +995,53 @@ FamilyNavigator.prototype.render = function () {
         }
     }
 
+    this._updateOriginHighlight();
+
     // Draw connectors on canvas
     this.drawConnectors(canvasW, canvasH);
 
     // Render floating ancestor icons in overlay
     this._renderIconOverlay(canvasW, canvasH);
+};
+
+/**
+ * Keep the origin highlight on the actual focused/root person card,
+ * even when the root couple was visually gender-swapped.
+ */
+FamilyNavigator.prototype._updateOriginHighlight = function () {
+    if (!this.cardElements || !this.treeData) return;
+
+    var rootId = this.treeData.rootId;
+    var targetXref = this.currentRootXref || this.baseXref || '';
+
+    for (var nodeId in this.cardElements) {
+        var wrapper = this.cardElements[nodeId];
+        if (!wrapper) continue;
+
+        var cards = wrapper.querySelectorAll('.sp-card');
+        if (!cards || cards.length === 0) continue;
+
+        for (var i = 0; i < cards.length; i++) {
+            cards[i].classList.remove('sp-origin');
+        }
+
+        if (nodeId !== rootId) {
+            continue;
+        }
+
+        var matched = false;
+        for (var ci = 0; ci < cards.length; ci++) {
+            if ((cards[ci].dataset.xref || '') === targetXref && targetXref !== '') {
+                cards[ci].classList.add('sp-origin');
+                matched = true;
+                break;
+            }
+        }
+
+        if (!matched && cards[0]) {
+            cards[0].classList.add('sp-origin');
+        }
+    }
 };
 
 /**
@@ -2914,6 +2985,13 @@ FamilyNavigator.prototype.initToolbar = function () {
         });
     }
 
+    var btnOpenPage = document.getElementById(prefix + '_btnOpenPage');
+    if (btnOpenPage) {
+        btnOpenPage.addEventListener('click', function () {
+            nav.openFullPage();
+        });
+    }
+
     var btnHome = document.getElementById(prefix + '_btnHome');
     if (btnHome) {
         btnHome.addEventListener('click', function () {
@@ -2927,7 +3005,7 @@ FamilyNavigator.prototype.initToolbar = function () {
         zoomOut:    btnZoomOut,
         zoomReset:  btnZoomReset,
         fullscreen: btnFullscreen,
-        share:      btnShare
+        share:      btnShare || btnOpenPage
     };
 
     // Sources toggle
@@ -3163,31 +3241,42 @@ FamilyNavigator.prototype._setCurrentXref = function (targetXref) {
     var rootNode = this.nodeMap[this.treeData.rootId];
     if (!rootNode || !rootNode.person) return;
 
+    var desiredXref = targetXref || this.baseXref || rootNode.person.xref;
+
     // Default: root person's own xref
     this.currentRootXref = rootNode.person.xref;
+    if (this.treeData && this.treeData.rootId) {
+        this.activeLines[this.treeData.rootId] = 0;
+    }
 
-    // Check if the target ended up as spouse (gender swap)
-    if (targetXref && targetXref !== rootNode.person.xref && rootNode.families) {
+    // Check if the requested person ended up as spouse (gender swap)
+    if (desiredXref && desiredXref !== rootNode.person.xref && rootNode.families) {
         for (var fi = 0; fi < rootNode.families.length; fi++) {
-            if (rootNode.families[fi].spouse && rootNode.families[fi].spouse.xref === targetXref) {
-                this.currentRootXref = targetXref;
+            if (rootNode.families[fi].spouse && rootNode.families[fi].spouse.xref === desiredXref) {
+                this.currentRootXref = desiredXref;
                 this.activeLines[this.treeData.rootId] = fi + 1;
-                break;
+                this._updateOriginHighlight();
+                return;
             }
         }
     }
+
+    this.currentRootXref = desiredXref || rootNode.person.xref;
+    this._updateOriginHighlight();
 };
 
 /**
- * Build a shareable URL for the current tree view and copy it to clipboard.
+ * Build a URL for the current tree state.
  * Captures toggle states, zoom, viewport center, and expansion history.
  */
-FamilyNavigator.prototype.copyShareLink = function (btnEl) {
-    var url = new URL(window.location.href);
+FamilyNavigator.prototype._buildStateUrl = function (baseUrl) {
+    var url = new URL(baseUrl || window.location.href, window.location.href);
+
     if (this.currentRootXref) {
         url.searchParams.set('xref', this.currentRootXref);
     }
-    // Toggle states — always explicit so recipient sees sender's exact view
+
+    // Toggle states — always explicit so recipient sees the exact same view.
     url.searchParams.set('sources', this.showSources ? '1' : '0');
     url.searchParams.set('details', this.showDetails ? '1' : '0');
     url.searchParams.set('advanced', this.showAdvancedControls ? '1' : '0');
@@ -3226,7 +3315,27 @@ FamilyNavigator.prototype.copyShareLink = function (btnEl) {
         url.searchParams.delete('anc');
     }
 
-    var shareUrl = url.toString();
+    return url;
+};
+
+/**
+ * Open the current tree in the standalone full-page chart view.
+ */
+FamilyNavigator.prototype.openFullPage = function () {
+    if (!this.fullPageUrl) return;
+
+    var targetUrl = this._buildStateUrl(this.fullPageUrl).toString();
+    var opened = window.open(targetUrl, '_blank', 'noopener');
+    if (!opened) {
+        window.location.href = targetUrl;
+    }
+};
+
+/**
+ * Build a shareable URL for the current tree view and copy it to clipboard.
+ */
+FamilyNavigator.prototype.copyShareLink = function (btnEl) {
+    var shareUrl = this._buildStateUrl(window.location.href).toString();
 
     navigator.clipboard.writeText(shareUrl).then(function () {
         // Brief visual feedback — swap icon to checkmark
@@ -3254,21 +3363,71 @@ FamilyNavigator.prototype.copyShareLink = function (btnEl) {
 // ==========================================================================
 
 FamilyNavigator.prototype.focusOrigin = function () {
-    this.focusNode(this.treeData.rootId);
+    this.focusNode(this.treeData.rootId, this.currentRootXref || null);
+};
+
+FamilyNavigator.prototype._getNodeFocusPoint = function (nodeId, targetXref) {
+    var layout = this.layoutMap[nodeId];
+    if (!layout) return null;
+
+    var fallback = {
+        x: layout.centerX,
+        y: layout.y + layout.h / 2
+    };
+
+    if (!targetXref) {
+        return fallback;
+    }
+
+    var node = this.nodeMap[nodeId];
+    var wrapper = this.cardElements[nodeId];
+    if (!node || !wrapper) {
+        return fallback;
+    }
+
+    var cards = wrapper.querySelectorAll('.sp-card');
+    if (!cards || cards.length === 0) {
+        return fallback;
+    }
+
+    var cardIndex = -1;
+    if (node.person && node.person.xref === targetXref) {
+        cardIndex = 0;
+    } else if (node.families) {
+        for (var fi = 0; fi < node.families.length; fi++) {
+            if (node.families[fi].spouse && node.families[fi].spouse.xref === targetXref) {
+                cardIndex = fi + 1;
+                break;
+            }
+        }
+    }
+
+    if (cardIndex < 0 || !cards[cardIndex]) {
+        return fallback;
+    }
+
+    var wRect = wrapper.getBoundingClientRect();
+    var cRect = cards[cardIndex].getBoundingClientRect();
+
+    return {
+        x: layout.x + ((cRect.left + cRect.width / 2) - wRect.left) / this.zoomLevel,
+        y: layout.y + ((cRect.top + cRect.height / 2) - wRect.top) / this.zoomLevel
+    };
 };
 
 /**
  * Center the viewport on a specific node.
  */
-FamilyNavigator.prototype.focusNode = function (nodeId) {
+FamilyNavigator.prototype.focusNode = function (nodeId, focusXref) {
     if (!this.container) return;
-    var layout = this.layoutMap[nodeId];
-    if (!layout) return;
+
+    var point = this._getNodeFocusPoint(nodeId, focusXref);
+    if (!point) return;
 
     var wrapRect = this.container.getBoundingClientRect();
 
-    var targetX = layout.centerX * this.zoomLevel;
-    var targetY = (layout.y + layout.h / 2) * this.zoomLevel;
+    var targetX = point.x * this.zoomLevel;
+    var targetY = point.y * this.zoomLevel;
 
     this.panX = wrapRect.width / 2 - targetX;
     this.panY = wrapRect.height / 2 - targetY;

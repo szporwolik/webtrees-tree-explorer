@@ -301,6 +301,9 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     line-height: 1.2;
+    min-width: 0;
+    flex: 1 1 auto;
+    display: block;
 }
 
 .sp-focus-chip-empty .sp-focus-chip-name {
@@ -319,6 +322,19 @@
 
 .sp-focus-chip:hover .sp-focus-chip-swap {
     color: #3b82f6;
+}
+
+.sp-navigator[data-profile-view="1"] .sp-focus-chip {
+    max-width: 180px;
+}
+
+.sp-navigator[data-profile-view="1"] .sp-toggle-switch-label {
+    gap: 4px;
+    padding: 2px 8px;
+}
+
+.sp-navigator[data-profile-view="1"] .sp-toggle-label {
+    display: none;
 }
 
 /* =====================================================================

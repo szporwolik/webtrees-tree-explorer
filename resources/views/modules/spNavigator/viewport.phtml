@@ -13,7 +13,12 @@ use Fisharebest\Webtrees\I18N;
  * @var bool   $defaultDetails
  * @var bool   $defaultAdvancedControls
  * @var bool   $defaultSources
+ * @var bool   $profileView
+ * @var string $fullPageUrl
  */
+
+$profileView = $profileView ?? false;
+$fullPageUrl = $fullPageUrl ?? '';
 
 ?>
 
@@ -64,7 +69,7 @@ window.wtpTranslations = <?= json_encode([
 </script>
 
 <div class="wt-chart wt-chart-interactive wtp-plugin-root">
-    <div id="<?= $prefix ?>_wrap" class="sp-navigator" data-url-expand="<?= e($expandUrl) ?>" data-url-search="<?= e($searchUrl) ?>" data-base-xref="<?= e($rootXref) ?>" data-default-details="<?= $defaultDetails ? '1' : '0' ?>" data-default-advanced="<?= $defaultAdvancedControls ? '1' : '0' ?>" data-default-sources="<?= $defaultSources ? '1' : '0' ?>" style="height: 500px">
+    <div id="<?= $prefix ?>_wrap" class="sp-navigator" data-url-expand="<?= e($expandUrl) ?>" data-url-search="<?= e($searchUrl) ?>" data-base-xref="<?= e($rootXref) ?>" data-default-details="<?= $defaultDetails ? '1' : '0' ?>" data-default-advanced="<?= $defaultAdvancedControls ? '1' : '0' ?>" data-default-sources="<?= $defaultSources ? '1' : '0' ?>" data-profile-view="<?= $profileView ? '1' : '0' ?>" data-full-page-url="<?= e($fullPageUrl) ?>" style="height: 500px">
         <div id="<?= $prefix ?>_overlay" class="sp-loading-overlay sp-overlay-active">
             <div class="sp-loading-spinner"></div>
         </div>
@@ -106,9 +111,15 @@ window.wtpTranslations = <?= json_encode([
                 <svg viewBox="0 0 16 16" width="16" height="16"><path d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <span class="sp-toolbar-sep"></span>
-            <button id="<?= $prefix ?>_btnShare" class="sp-btn" title="<?= I18N::translate('Copy share link') ?>">
-                <svg viewBox="0 0 16 16" width="16" height="16"><path d="M6.5 9.5l3-3M5.5 7.5a3 3 0 0 1 0-4.24l1-1a3 3 0 0 1 4.24 4.24l-.5.5M10.5 8.5a3 3 0 0 1 0 4.24l-1 1a3 3 0 0 1-4.24-4.24l.5-.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
+            <?php if ($profileView && $fullPageUrl !== '') : ?>
+                <button id="<?= $prefix ?>_btnOpenPage" class="sp-btn" title="<?= I18N::translate('Open in full page view') ?>">
+                    <svg viewBox="0 0 16 16" width="16" height="16"><path d="M9 2h5v5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 2L8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            <?php else : ?>
+                <button id="<?= $prefix ?>_btnShare" class="sp-btn" title="<?= I18N::translate('Copy share link') ?>">
+                    <svg viewBox="0 0 16 16" width="16" height="16"><path d="M6.5 9.5l3-3M5.5 7.5a3 3 0 0 1 0-4.24l1-1a3 3 0 0 1 4.24 4.24l-.5.5M10.5 8.5a3 3 0 0 1 0 4.24l-1 1a3 3 0 0 1-4.24-4.24l.5-.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            <?php endif; ?>
             <span class="sp-toolbar-sep"></span>
             <label class="sp-toggle-switch-label" title="<?= I18N::translate('Show/hide advanced card controls') ?>">
                 <input type="checkbox" id="<?= $prefix ?>_toggleAdvanced" class="sp-toggle-input">
