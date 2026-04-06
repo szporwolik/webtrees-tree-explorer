@@ -107,6 +107,11 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
         return I18N::translate('An interactive tree explorer showing ancestors and descendants.');
     }
 
+    public function chartBoxMenu(Individual $individual): ?Menu
+    {
+        return $this->chartMenu($individual);
+    }
+
     /**
      * Top navigation menu entry.
      */
