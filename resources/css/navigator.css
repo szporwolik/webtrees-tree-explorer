@@ -1251,6 +1251,15 @@ body:has(.sp-fullview) footer,
 body:has(.sp-fullview) nav[role="navigation"] {
     display: none !important;
 }
+/* Fallback for browsers without :has() support (Firefox < 121, Safari < 15.4) */
+body.sp-fullview-active .wt-header-wrapper,
+body.sp-fullview-active .wt-header,
+body.sp-fullview-active header,
+body.sp-fullview-active .wt-footer-container,
+body.sp-fullview-active footer,
+body.sp-fullview-active nav[role="navigation"] {
+    display: none !important;
+}
 
 /* Full-space mode — when the form is hidden, fill available width/height */
 .sp-full-space .sp-navigator {

@@ -159,6 +159,9 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     // Expansion history — records each AJAX expansion for share-link replay
     this._expansionHistory = []; // [{type:'lazy'|'ancestor', fid, pid, dir?, lineIndex?}]
 
+    // Tree generation counter — incremented on navigateTo to discard stale AJAX callbacks
+    this._treeGeneration = 0;
+
     // Debug mode — append ?debug=1 to URL to enable console logging
     this.debug = (new URL(window.location.href).searchParams.get('debug') === '1');
 
@@ -2541,11 +2544,13 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
 
     this.showLoader(true);
 
+    var gen = this._treeGeneration;
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
     xhr.timeout = 30000;
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
+            if (gen !== nav._treeGeneration) return; // tree replaced — discard
             nav.showLoader(false);
             if (xhr.status === 200 && xhr.responseText) {
                 try {
@@ -2564,10 +2569,12 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
         }
     };
     xhr.ontimeout = function () {
+        if (gen !== nav._treeGeneration) return;
         nav.showLoader(false);
         nav._showToast(__('Request timed out \u2014 please try again.'));
     };
     xhr.onerror = function () {
+        if (gen !== nav._treeGeneration) return;
         nav.showLoader(false);
         nav._showToast(__('Connection error \u2014 please check your network.'));
     };
@@ -2678,8 +2685,9 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
                 try {
                     var newData = JSON.parse(xhr.responseText);
                     if (newData.nodes && newData.nodes.length > 0) {
-                        // Replace the entire tree
-                        nav._dbg('navigateTo → received', newData.nodes.length, 'nodes, rootId=' + newData.rootId);
+                        // Replace the entire tree — bump generation to discard in-flight callbacks
+                        nav._treeGeneration++;
+                        nav._dbg('navigateTo → received', newData.nodes.length, 'nodes, rootId=' + newData.rootId, 'gen=' + nav._treeGeneration);
                         nav.treeData = newData;
                         nav.activeLines = {};
                         nav._expansionHistory = [];
@@ -2742,19 +2750,23 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
 
     this.showLoader(true);
 
+    var gen = this._treeGeneration;
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
     xhr.timeout = 30000;
     xhr.ontimeout = function () {
+        if (gen !== nav._treeGeneration) return;
         nav.showLoader(false);
         nav._showToast(__('Request timed out \u2014 please try again.'));
     };
     xhr.onerror = function () {
+        if (gen !== nav._treeGeneration) return;
         nav.showLoader(false);
         nav._showToast(__('Connection error \u2014 please check your network.'));
     };
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
+            if (gen !== nav._treeGeneration) return; // tree replaced — discard
             nav.showLoader(false);
             if (xhr.status === 200 && xhr.responseText) {
                 try {
@@ -3282,12 +3294,13 @@ FamilyNavigator.prototype.renderSearchResults = function (results) {
     // Event delegation — single listener instead of per-item closures
     if (!this._searchResultsDelegated) {
         this._searchResultsDelegated = true;
-        this.searchResults.addEventListener('click', function (e) {
+        this._searchResultsListener = function (e) {
             var item = e.target.closest('.sp-search-item[data-xref]');
             if (item && item.dataset.xref) {
                 nav._navigateFromSearch(item.dataset.xref);
             }
-        });
+        };
+        this.searchResults.addEventListener('click', this._searchResultsListener);
     }
 
     for (var i = 0; i < results.length; i++) {
@@ -4027,6 +4040,8 @@ FamilyNavigator.prototype.toggleFullscreen = function () {
     var chartParent = wrap.closest('.wt-chart-interactive');
     if (chartParent) {
         chartParent.classList.toggle('sp-fullview');
+        // Toggle body class as fallback for browsers without :has() support
+        document.body.classList.toggle('sp-fullview-active', chartParent.classList.contains('sp-fullview'));
     }
     setTimeout(function () {
         // Re-sync overlay and re-center after the resize
@@ -4064,6 +4079,10 @@ FamilyNavigator.prototype.destroy = function () {
     // Connectivity listeners
     if (this._onOffline) window.removeEventListener('offline', this._onOffline);
     if (this._onOnline) window.removeEventListener('online', this._onOnline);
+    // Search results delegation listener
+    if (this.searchResults && this._searchResultsListener) {
+        this.searchResults.removeEventListener('click', this._searchResultsListener);
+    }
     // Toasts
     this._dismissToast();
     // Icon overlay cleanup
