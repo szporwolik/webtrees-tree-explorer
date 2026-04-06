@@ -111,8 +111,10 @@ class FamilyTreeRenderer
     public function prepare(): void
     {
         $tName = $this->tree->name();
-        $visited = [];
-        $visited[$tName] = [];
+        $visited = Session::get('SPNav_visited', []);
+        if (!isset($visited[$tName])) {
+            $visited[$tName] = [];
+        }
         $visited[$tName][$this->rootXref] = [];
         Session::put('SPNav_visited', $visited);
     }

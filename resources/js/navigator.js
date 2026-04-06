@@ -3140,7 +3140,7 @@ FamilyNavigator.prototype.initToolbar = function () {
 
 FamilyNavigator.prototype.initSearch = function () {
     var nav = this;
-    var searchTimeout = null;
+    this._searchTimeout = null;
 
     if (!this.searchInput || !this.searchResults) return;
 
@@ -3149,7 +3149,7 @@ FamilyNavigator.prototype.initSearch = function () {
         var query = nav.searchInput.value.trim();
         nav.selectedXref = '';
 
-        if (searchTimeout) clearTimeout(searchTimeout);
+        if (nav._searchTimeout) clearTimeout(nav._searchTimeout);
 
         if (query.length < 2) {
             nav.searchResults.innerHTML = '';
@@ -3157,7 +3157,7 @@ FamilyNavigator.prototype.initSearch = function () {
             return;
         }
 
-        searchTimeout = setTimeout(function () {
+        nav._searchTimeout = setTimeout(function () {
             nav.fetchSearchResults(query);
         }, 300);
     });
@@ -3914,6 +3914,11 @@ FamilyNavigator.prototype.destroy = function () {
     // Re-parent search panel back (or remove)
     if (this.searchPanel && this.searchPanel.parentNode === document.body) {
         this.searchPanel.parentNode.removeChild(this.searchPanel);
+    }
+    // Search debounce cleanup
+    if (this._searchTimeout) {
+        clearTimeout(this._searchTimeout);
+        this._searchTimeout = null;
     }
     // Icon overlay cleanup
     if (this.iconOverlay && this.iconOverlay.parentNode) {
