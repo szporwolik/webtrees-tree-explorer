@@ -507,6 +507,9 @@ FamilyNavigator.prototype.nodeWidth = function (nodeId) {
         var w = this.CARD_W;
         for (var fi = 0; fi < node.families.length; fi++) {
             w += this.COUPLE_GAP + this.CARD_W;
+            if (fi > 0) {
+                w += this.MULTI_SPOUSE_SEP;
+            }
         }
         return w;
     }
@@ -633,22 +636,97 @@ FamilyNavigator.prototype.positionSubtree = function (nodeId, x, y, _visited) {
     }
 
     var childY = y + nodeH + this.V_GAP;
-    var childX = nodeCenterX - childrenTotalW / 2;
 
-    // First pass: position all children
-    for (var i = 0; i < children.length; i++) {
-        var cid = children[i];
-        var cLayout = this.layoutMap[cid];
-        this.positionSubtree(cid, childX, childY, _visited);
-        var gap = this.H_GAP;
-        if (i + 1 < children.length) {
-            var prevFi = this._childFamilyIndex(nodeId, children[i]);
-            var nextFi = this._childFamilyIndex(nodeId, children[i + 1]);
-            if (prevFi !== nextFi && prevFi >= 0 && nextFi >= 0) {
-                gap += this.FAMILY_GROUP_GAP;
+    var familyGroups = [];
+    var currentGroup = null;
+    for (var ci = 0; ci < children.length; ci++) {
+        var groupChildId = children[ci];
+        var groupFamilyIndex = this._childFamilyIndex(nodeId, groupChildId);
+        if (!currentGroup || currentGroup.familyIndex !== groupFamilyIndex) {
+            currentGroup = { familyIndex: groupFamilyIndex, children: [], width: 0 };
+            familyGroups.push(currentGroup);
+        }
+        currentGroup.children.push(groupChildId);
+    }
+
+    for (var gi = 0; gi < familyGroups.length; gi++) {
+        var group = familyGroups[gi];
+        var groupWidth = 0;
+        for (var gj = 0; gj < group.children.length; gj++) {
+            if (gj > 0) {
+                groupWidth += this.H_GAP;
+            }
+            groupWidth += this.layoutMap[group.children[gj]].subtreeW;
+        }
+        group.width = groupWidth;
+    }
+
+    var useFamilyAlignedLayout = familyGroups.length > 1;
+    for (var fgi = 0; fgi < familyGroups.length; fgi++) {
+        if (familyGroups[fgi].familyIndex < 0) {
+            useFamilyAlignedLayout = false;
+            break;
+        }
+    }
+
+    if (useFamilyAlignedLayout) {
+        var groupGap = this.H_GAP + this.FAMILY_GROUP_GAP;
+        var groupBoxes = [];
+
+        for (var gbi = 0; gbi < familyGroups.length; gbi++) {
+            var famGroup = familyGroups[gbi];
+            var desiredCenter = this.getCoupleLineCenterX(layout, famGroup.familyIndex);
+            var left = desiredCenter - famGroup.width / 2;
+
+            if (groupBoxes.length > 0) {
+                var prevBox = groupBoxes[groupBoxes.length - 1];
+                left = Math.max(left, prevBox.right + groupGap);
+            }
+
+            groupBoxes.push({
+                left: left,
+                right: left + famGroup.width
+            });
+        }
+
+        if (groupBoxes.length > 0) {
+            var spanLeft = groupBoxes[0].left;
+            var spanRight = groupBoxes[groupBoxes.length - 1].right;
+            var shift = nodeCenterX - ((spanLeft + spanRight) / 2);
+            for (var sgi = 0; sgi < groupBoxes.length; sgi++) {
+                groupBoxes[sgi].left += shift;
+                groupBoxes[sgi].right += shift;
             }
         }
-        childX += cLayout.subtreeW + gap;
+
+        for (var pgi = 0; pgi < familyGroups.length; pgi++) {
+            var placedGroup = familyGroups[pgi];
+            var groupChildX = groupBoxes[pgi].left;
+            for (var pgj = 0; pgj < placedGroup.children.length; pgj++) {
+                var placedChildId = placedGroup.children[pgj];
+                var placedLayout = this.layoutMap[placedChildId];
+                this.positionSubtree(placedChildId, groupChildX, childY, _visited);
+                groupChildX += placedLayout.subtreeW + this.H_GAP;
+            }
+        }
+    } else {
+        var childX = nodeCenterX - childrenTotalW / 2;
+
+        // First pass: position all children
+        for (var i = 0; i < children.length; i++) {
+            var cid = children[i];
+            var cLayout = this.layoutMap[cid];
+            this.positionSubtree(cid, childX, childY, _visited);
+            var gap = this.H_GAP;
+            if (i + 1 < children.length) {
+                var prevFi = this._childFamilyIndex(nodeId, children[i]);
+                var nextFi = this._childFamilyIndex(nodeId, children[i + 1]);
+                if (prevFi !== nextFi && prevFi >= 0 && nextFi >= 0) {
+                    gap += this.FAMILY_GROUP_GAP;
+                }
+            }
+            childX += cLayout.subtreeW + gap;
+        }
     }
 
     // Second pass: ensure no children overlap with their siblings
@@ -1701,7 +1779,8 @@ FamilyNavigator.prototype.getPersonBottomY = function(layout) {
  * Get spouse card left X for given spouse index
  */
 FamilyNavigator.prototype.getSpouseLeftX = function(layout, spouseIndex) {
-    return layout.x + this.CARD_W + this.COUPLE_GAP + spouseIndex * (this.CARD_W + this.COUPLE_GAP);
+    var extraGap = spouseIndex > 0 ? spouseIndex * this.MULTI_SPOUSE_SEP : 0;
+    return layout.x + this.CARD_W + this.COUPLE_GAP + spouseIndex * (this.CARD_W + this.COUPLE_GAP) + extraGap;
 };
 
 /**
@@ -1780,6 +1859,30 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
     // Track staggered Y offsets for each family so child forks can originate from correct position
     var staggeredOffsets = {};  // nodeId -> { familyIndex -> yOffset }
 
+    function getFamilyAnchorX(nodeId, layout, familyIndex) {
+        var node = self.nodeMap[nodeId];
+        var wrapper = self.cardElements[nodeId];
+        if (wrapper) {
+            var wRect = wrapper.getBoundingClientRect();
+            var cards = wrapper.querySelectorAll('.sp-card');
+            var spouseCard = cards[familyIndex + 1];
+            if (node && node.families && node.families.length > 1 && spouseCard) {
+                var spouseRect = spouseCard.getBoundingClientRect();
+                return snap(layout.x + ((spouseRect.left + spouseRect.width / 2) - wRect.left) / self.zoomLevel);
+            }
+            var lines = wrapper.querySelectorAll('.sp-couple-line');
+            if (lines[familyIndex]) {
+                var lineRect = lines[familyIndex].getBoundingClientRect();
+                return snap(layout.x + ((lineRect.left + lineRect.width / 2) - wRect.left) / self.zoomLevel);
+            }
+        }
+
+        if (node && node.families && node.families.length > 1) {
+            return snap(self.getSpouseLeftX(layout, familyIndex) + self.CARD_W / 2);
+        }
+        return snap(self.getCoupleLineCenterX(layout, familyIndex));
+    }
+
     for (var nodeId in this.layoutMap) {
         var layout = this.layoutMap[nodeId];
         if (!layout || layout.x === undefined) continue;
@@ -1854,7 +1957,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
                 var lineRect = lineEl.getBoundingClientRect();
                 var dropStartY = snap(connectorY - 1);
                 var dropEndY = snap(layout.y + ((lineRect.bottom - wrapperRect.top) / this.zoomLevel) + offset);
-                var dropX = snap(layout.x + ((lineRect.left + lineRect.width / 2) - wrapperRect.left) / this.zoomLevel);
+                var dropX = getFamilyAnchorX(nodeId, layout, fi);
 
                 ctx.beginPath();
                 ctx.moveTo(dropX, dropStartY);
@@ -1877,16 +1980,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
 
         // Helper functions for connector source and target positions
         function coupleLineCenterX(nodeId, layout, fi) {
-            var wrapper = self.cardElements[nodeId];
-            if (wrapper) {
-                var lines = wrapper.querySelectorAll('.sp-couple-line');
-                if (lines[fi]) {
-                    var wRect = wrapper.getBoundingClientRect();
-                    var lineRect = lines[fi].getBoundingClientRect();
-                    return layout.x + ((lineRect.left + lineRect.width / 2) - wRect.left) / self.zoomLevel;
-                }
-            }
-            return self.getCoupleLineCenterX(layout, fi);
+            return getFamilyAnchorX(nodeId, layout, fi);
         }
 
         function coupleLineBottomY(nodeId, layout, fi) {
