@@ -2551,11 +2551,11 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
     };
     xhr.ontimeout = function () {
         nav.showLoader(false);
-        nav._showToast('Request timed out \u2014 please try again.');
+        nav._showToast(__('Request timed out \u2014 please try again.'));
     };
     xhr.onerror = function () {
         nav.showLoader(false);
-        nav._showToast('Connection error \u2014 please check your network.');
+        nav._showToast(__('Connection error \u2014 please check your network.'));
     };
     xhr.send();
 };
@@ -2693,11 +2693,11 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
     };
     xhr.ontimeout = function () {
         nav.showLoader(false);
-        nav._showToast('Request timed out \u2014 please try again.');
+        nav._showToast(__('Request timed out \u2014 please try again.'));
     };
     xhr.onerror = function () {
         nav.showLoader(false);
-        nav._showToast('Connection error \u2014 please check your network.');
+        nav._showToast(__('Connection error \u2014 please check your network.'));
     };
     xhr.send();
 };
@@ -2733,11 +2733,11 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
     xhr.timeout = 30000;
     xhr.ontimeout = function () {
         nav.showLoader(false);
-        nav._showToast('Request timed out \u2014 please try again.');
+        nav._showToast(__('Request timed out \u2014 please try again.'));
     };
     xhr.onerror = function () {
         nav.showLoader(false);
-        nav._showToast('Connection error \u2014 please check your network.');
+        nav._showToast(__('Connection error \u2014 please check your network.'));
     };
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
@@ -2760,7 +2760,7 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
                 }
             } else if (xhr.status !== 0) {
                 // HTTP error — keep node so user can retry
-                nav._showToast('Server error \u2014 please try again.');
+                nav._showToast(__('Server error \u2014 please try again.'));
             }
         }
     };
@@ -3200,10 +3200,10 @@ FamilyNavigator.prototype.fetchSearchResults = function (query) {
     xhr.open('GET', url, true);
     xhr.timeout = 15000;
     xhr.ontimeout = function () {
-        nav._showToast('Search timed out \u2014 please try again.', { type: 'warn' });
+        nav._showToast(__('Search timed out \u2014 please try again.'), { type: 'warn' });
     };
     xhr.onerror = function () {
-        nav._showToast('Connection error \u2014 search failed.', { type: 'warn' });
+        nav._showToast(__('Connection error \u2014 search failed.'), { type: 'warn' });
     };
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
@@ -3218,7 +3218,7 @@ FamilyNavigator.prototype.fetchSearchResults = function (query) {
                     nav.renderSearchResults([]);
                 }
             } else if (xhr.status !== 0) {
-                nav._showToast('Search failed \u2014 please try again.', { type: 'warn' });
+                nav._showToast(__('Search failed \u2014 please try again.'), { type: 'warn' });
             }
         }
     };
@@ -3648,10 +3648,10 @@ FamilyNavigator.prototype._dismissToast = function (type) {
 FamilyNavigator.prototype._initConnectivityWatch = function () {
     var nav = this;
     this._onOffline = function () {
-        nav._showToast('Connection lost \u2014 please reload the page.', {
+        nav._showToast(__('Connection lost \u2014 please reload the page.'), {
             type: 'error',
             duration: 0,
-            action: { label: 'Reload', fn: function () { window.location.reload(); } }
+            action: { label: __('Reload'), fn: function () { window.location.reload(); } }
         });
     };
     this._onOnline = function () {
@@ -3903,11 +3903,11 @@ FamilyNavigator.prototype._replayLazyExpand = function (fid, pid, dir, callback)
     xhr.open('GET', url, true);
     xhr.timeout = 30000;
     xhr.ontimeout = function () {
-        nav._showToast('Request timed out \u2014 some branches may not have loaded.');
+        nav._showToast(__('Request timed out \u2014 some branches may not have loaded.'));
         callback();
     };
     xhr.onerror = function () {
-        nav._showToast('Connection error \u2014 some branches may not have loaded.');
+        nav._showToast(__('Connection error \u2014 some branches may not have loaded.'));
         callback();
     };
     xhr.onreadystatechange = function () {
@@ -3976,11 +3976,11 @@ FamilyNavigator.prototype._replayAncestorExpand = function (fid, pid, lineIndex,
     xhr.open('GET', url, true);
     xhr.timeout = 30000;
     xhr.ontimeout = function () {
-        nav._showToast('Request timed out \u2014 some branches may not have loaded.');
+        nav._showToast(__('Request timed out \u2014 some branches may not have loaded.'));
         callback();
     };
     xhr.onerror = function () {
-        nav._showToast('Connection error \u2014 some branches may not have loaded.');
+        nav._showToast(__('Connection error \u2014 some branches may not have loaded.'));
         callback();
     };
     xhr.onreadystatechange = function () {
