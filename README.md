@@ -68,7 +68,7 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 ├── Traits/
 │   └── DiagramChartFeature.php     # Chart menu integration
 ├── resources/
-│   ├── lang/                       # Translation files (PO/MO)
+│   ├── lang/                       # Translation files (PHP arrays)
 │   ├── css/
 │   │   └── navigator.css           # Complete module stylesheet
 │   ├── js/
@@ -81,8 +81,6 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 │               ├── diagram.phtml
 │               ├── settings.phtml
 │               └── viewport.phtml
-└── tools/
-    └── compile_translations.py     # Translation compiler
 ```
 
 ## Dependencies

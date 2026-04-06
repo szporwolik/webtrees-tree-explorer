@@ -13,7 +13,6 @@ namespace SpTreeExplorer\FamilyNav;
 use Aura\Router\RouterContainer;
 use Aura\Router\Map;
 use Fig\Http\Message\RequestMethodInterface;
-use Fisharebest\Localization\Translation;
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\FlashMessages;
 use Fisharebest\Webtrees\I18N;
@@ -83,11 +82,9 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
 
     public function customTranslations(string $language): array
     {
-        $file = $this->resourcesFolder() . 'lang' . DIRECTORY_SEPARATOR . $language . '.mo';
-        if (file_exists($file)) {
-            return (new Translation($file))->asArray();
-        }
-        return [];
+        $file = $this->resourcesFolder() . 'lang' . DIRECTORY_SEPARATOR . $language . '.php';
+
+        return file_exists($file) ? require $file : [];
     }
 
     public function title(): string
