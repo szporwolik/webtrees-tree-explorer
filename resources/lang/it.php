@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 return [
     '%s for %s' => '%s per %s',
