@@ -7,7 +7,7 @@
 
 An interactive family tree explorer for [webtrees](https://webtrees.net/) — the leading open-source genealogy application.
 
-Built to deliver a clean, modern card-based UI that feels cohesive and powerful for exploring multi-generational family trees. This module was inspired by the [webtrees Interactive Tree](https://webtrees.net/) and the excellent [huhwt-xtv](https://github.com/huhwt/huhwt-xtv) plugin by Hermann Hartenthaler. The goal was to create a convenient and familiar genealogy visualization for people used to popular web genealogy platforms, combining modern UI design with powerful navigation features.
+Built to deliver a clean, modern card-based UI that feels cohesive and powerful for exploring multi-generational family trees. This module was inspired by the [webtrees Interactive Tree](https://webtrees.net/) and the excellent [huhwt-xtv](https://github.com/huhwt/huhwt-xtv) plugin by [huhwt](https://github.com/huhwt). The goal was to create a convenient and familiar genealogy visualization for people used to popular web genealogy platforms, combining modern UI design with powerful navigation features.
 
 Repo: https://github.com/szporwolik/webtrees-tree-explorer
 
