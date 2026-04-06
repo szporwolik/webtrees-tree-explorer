@@ -63,7 +63,7 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
 
     public function customModuleVersion(): string
     {
-        return '0.6.0';
+        return '0.7.0';
     }
 
     public function customModuleLatestVersionUrl(): string
