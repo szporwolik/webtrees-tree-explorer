@@ -3484,8 +3484,8 @@ FamilyNavigator.prototype.focusNode = function (nodeId, focusXref) {
     this.panX = wrapRect.width / 2 - targetX;
 
     if (this.profileView) {
-        // Place the focused card near the top with a small margin
-        var topMargin = 24;
+        // Place the focused card near the top, below the toolbar controls
+        var topMargin = 80;
         this.panY = topMargin - targetY + (this.CARD_H / 2) * this.zoomLevel;
     } else {
         this.panY = wrapRect.height / 2 - targetY;
