@@ -7,7 +7,7 @@
 
 An interactive family tree explorer for [webtrees](https://webtrees.net/) — the leading open-source genealogy application.
 
-Built to deliver a clean, modern card-based UI that feels cohesive and powerful for exploring multi-generational family trees. This module was inspired by the [webtrees Interactive Tree](https://webtrees.net/) and the excellent [huhwt-xtv](https://github.com/huhwt/huhwt-xtv) plugin by Hermann Hartenthaler. The goal was to create a convenient and familiar genealogy visualization for people used to popular web genealogy platforms, combining modern UI design with powerful navigation features.
+Built to deliver a clean, modern card-based UI that feels cohesive and powerful for exploring multi-generational family trees. This module was inspired by the [webtrees Interactive Tree](https://webtrees.net/) and the excellent [huhwt-xtv](https://github.com/huhwt/huhwt-xtv) plugin by [huhwt](https://github.com/huhwt). The goal was to create a convenient and familiar genealogy visualization for people used to popular web genealogy platforms, combining modern UI design with powerful navigation features.
 
 Repo: https://github.com/szporwolik/webtrees-tree-explorer
 
@@ -22,11 +22,12 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 • Expand / collapse branches with click  
 • Center on root person  
 • Fullscreen toggle  
-• Configurable generation depth (1–25)  
 • Gender-coded card borders (blue = male, pink = female)  
 • **Search dropdown** to find and navigate to any person in the tree  
 • **Multiple marriages support** — all spouses and children from all marriages displayed  
 • **Unknown parent placeholders** — when siblings exist but parents don't, synthetic "?" boxes are created  
+• **Source / note / media badges and quick actions** on person and family cards  
+• **Configurable default view settings** for details, sources, and advanced controls  
 • Print-friendly styling  
 • AJAX-powered lazy loading of tree branches  
 • Share link support for direct navigation
@@ -49,6 +50,15 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 • PHP 7.4+  
 • Modern web browser with JavaScript enabled
 
+## Translations
+
+Runtime translations are loaded from PHP array files in `resources/lang/`.
+
+Currently included locales:
+`cs`, `da`, `de`, `es`, `fr`, `it`, `nb`, `nl`, `pl`, `pt`, `pt-BR`, `ro`, `ru`, `sv`, `tr`, `uk`
+
+English uses the built-in source strings and does not need a separate language file.
+
 ## Project Structure
 
 ```
@@ -56,7 +66,6 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 ├── SpTreeExplorer.php              # Main module class
 ├── SpTreeExplorerHandler.php       # AJAX request handler
 ├── autoload.php                    # PSR-4 autoloader
-├── LICENSE.md                      # GPL-3.0
 ├── README.md
 ├── latest-version.txt
 ├── screenshots/                    # README images
@@ -68,7 +77,7 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 ├── Traits/
 │   └── DiagramChartFeature.php     # Chart menu integration
 ├── resources/
-│   ├── lang/                       # Translation files (PO/MO)
+│   ├── lang/                       # Translation files (PHP arrays, 16 locales)
 │   ├── css/
 │   │   └── navigator.css           # Complete module stylesheet
 │   ├── js/
@@ -81,8 +90,6 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 │               ├── diagram.phtml
 │               ├── settings.phtml
 │               └── viewport.phtml
-└── tools/
-    └── compile_translations.py     # Translation compiler
 ```
 
 ## Dependencies
@@ -92,8 +99,8 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 • Uses webtrees API: `Individual`, `Family`, `Tree`, `Auth`, `Registry`, `I18N`, etc.
 
 **JavaScript:**  
-• Native ES6+ JavaScript (no external frameworks required)  
-• Uses standard browser APIs: Canvas, Fetch, DOM manipulation
+• ES5 JavaScript — no external frameworks required  
+• Uses standard browser APIs: Canvas, XMLHttpRequest, DOM manipulation
 
 ## Roadmap / Future Features
 
@@ -101,7 +108,7 @@ Szymon Porwolik — [szymon.porwolik.com](https://szymon.porwolik.com/)
 
 ## Contributing
 
-This is a personal project. Issues are welcome, but pull requests are not accepted.
+This is a personal project. Issues are welcome, and pull requests are accepted — please open them against the `dev` branch.
 
 ## License
 

@@ -71,6 +71,12 @@ class FamilyTreeRenderer
     /** @var bool Default state for the Sources toggle */
     private bool $defaultSources = false;
 
+    /** @var bool Whether the viewport is rendered inside the individual profile tab */
+    private bool $profileView = false;
+
+    /** @var string URL of the standalone full-page chart view */
+    private string $fullPageUrl = '';
+
     public function __construct(string $prefix, string $moduleName, Tree $tree, string $rootXref, string $moduleVersion = '')
     {
         $this->prefix     = $prefix;
@@ -87,14 +93,28 @@ class FamilyTreeRenderer
         $this->defaultSources = $sources;
     }
 
+    public function setGenerationLimits(int $maxUp, int $maxDown): void
+    {
+        $this->maxGenUp = $maxUp;
+        $this->maxGenDown = $maxDown;
+    }
+
+    public function setProfileTabOptions(bool $profileView, string $fullPageUrl = ''): void
+    {
+        $this->profileView = $profileView;
+        $this->fullPageUrl = $fullPageUrl;
+    }
+
     /**
      * Initialize session tracking for visited nodes.
      */
     public function prepare(): void
     {
         $tName = $this->tree->name();
-        $visited = [];
-        $visited[$tName] = [];
+        $visited = Session::get('SPNav_visited', []);
+        if (!isset($visited[$tName])) {
+            $visited[$tName] = [];
+        }
         $visited[$tName][$this->rootXref] = [];
         Session::put('SPNav_visited', $visited);
     }
@@ -171,7 +191,7 @@ class FamilyTreeRenderer
             'nodes' => array_values($this->nodes),
             'edges' => $this->edges,
             'rootId' => 'n0',
-        ], JSON_UNESCAPED_UNICODE);
+        ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
 
         $expandUrl = route(SpTreeExplorerHandler::class, [
             'module'   => $this->moduleName,
@@ -198,16 +218,16 @@ class FamilyTreeRenderer
             'defaultDetails'          => $this->defaultDetails,
             'defaultAdvancedControls' => $this->defaultAdvancedControls,
             'defaultSources'          => $this->defaultSources,
+            'profileView'             => $this->profileView,
+            'fullPageUrl'             => $this->fullPageUrl,
         ]);
 
         $isExpanded = $expanded ? 'true' : 'false';
-        $jsExpandUrl = addcslashes($expandUrl, "'\\");
-        $jsSearchUrl = addcslashes($searchUrl, "'\\");
-        $jsInit = 'wtpInitCSSColors(); var ' . $this->jsHandle . 'Controller = new FamilyNavigator("'
-            . $cardName . '", ' . $isExpanded . ', '
-            . $treeData . ', "'
-            . $jsExpandUrl . '", "'
-            . $jsSearchUrl . '");';
+        $jsInit = 'wtpInitCSSColors(); var ' . $this->jsHandle . 'Controller = new FamilyNavigator('
+            . json_encode($cardName) . ', ' . $isExpanded . ', '
+            . $treeData . ', '
+            . json_encode($expandUrl) . ', '
+            . json_encode($searchUrl) . ');';
 
         return [$html, $jsInit];
     }
@@ -439,7 +459,7 @@ class FamilyTreeRenderer
                 $gSpouse = $gSpFam->spouse($person);
                 $gSpouseData = null;
                 if ($gSpouse instanceof Individual) {
-                    // Gender swap for single-family ancestor nodes
+                    // Keep the male on the left for single-family opposite-sex couples.
                     if (count($guardSpouseFams) === 1
                         && $person->sex() === 'F' && $gSpouse->sex() === 'M') {
                         $gSpouseData = $personData;
@@ -585,7 +605,8 @@ class FamilyTreeRenderer
                 $spouseData = $this->buildPersonData($spouse);
                 $spouseData['divorced'] = $divorced;
 
-                // Gender swap: only when single family (ancestor direction)
+                // Keep the male on the left for single-family opposite-sex couples.
+                // The wrong-partner bug is handled separately via family-aware ancestor matching.
                 if (count($allSpouseFamilies) === 1 && $person->sex() === 'F' && $spouse->sex() === 'M') {
                     $tmp = $personData;
                     $personData = $spouseData;
@@ -698,27 +719,30 @@ class FamilyTreeRenderer
                     'familyXref' => $parentFamily->xref(),
                     'type' => 'self',
                     'personXref' => $xref,
+                    'lineIndex' => 0,
                 ];
             }
         }
-        // Only first spouse's parents get ancestor line (lineIndex 1)
-        if (!empty($families) && $families[0]['spouse'] !== null) {
-            $firstSpouse = null;
-            $firstSpFam = $familyObjects[0] ?? null;
-            if ($firstSpFam instanceof Family) {
-                $firstSpouse = $firstSpFam->spouse($person);
+
+        // Add one ancestor line per spouse family, matching the sorted family order.
+        foreach ($familyObjects as $familyIndex => $spouseFamily) {
+            $spouse = $spouseFamily->spouse($person);
+            if (!$spouse instanceof Individual) {
+                continue;
             }
-            if ($firstSpouse instanceof Individual) {
-                $spParentFam = $this->bestParentFamily($firstSpouse);
-                if ($spParentFam instanceof Family) {
-                    $ancestorLines[] = [
-                        'familyXref' => $spParentFam->xref(),
-                        'type' => 'spouse',
-                        'spouseXref' => $firstSpouse->xref(),
-                    ];
-                }
+
+            $spParentFam = $this->bestParentFamily($spouse);
+            if ($spParentFam instanceof Family) {
+                $ancestorLines[] = [
+                    'familyXref' => $spParentFam->xref(),
+                    'type' => 'spouse',
+                    'spouseXref' => $spouse->xref(),
+                    'familyIndex' => $familyIndex,
+                    'lineIndex' => $familyIndex + 1,
+                ];
             }
         }
+
         $hasMultipleAncestorLines = count($ancestorLines) > 1;
 
         // --- Store node ---
@@ -763,7 +787,7 @@ class FamilyTreeRenderer
 
         // --- Ancestors above (after descendants, see comment above) ---
         if ($direction >= 0) {
-            $this->collectAncestors($person, $nodeId, $throughFamily, $generation);
+            $this->collectAncestors($person, $nodeId, $throughFamily, $generation, $familyObjects);
         }
 
         return $nodeId;
@@ -771,9 +795,12 @@ class FamilyTreeRenderer
 
     /**
      * Collect ancestor nodes for a person.
+     *
+     * @param array<int, Family> $spouseFamilies Display-order spouse families for this node.
      */
     private function collectAncestors(Individual $person, string $childNodeId,
-                                      ?Family $throughFamily, int $generation = 0): void
+                                      ?Family $throughFamily, int $generation = 0,
+                                      array $spouseFamilies = []): void
     {
         $xref = $person->xref();
         $parentFamily = $this->bestParentFamily($person);
@@ -792,6 +819,7 @@ class FamilyTreeRenderer
                         'type' => 'parent-child',
                         'line' => 'self',
                         'lineIndex' => 0,
+                        'familyXref' => $parentFamily->xref(),
                     ];
                 }
                 // Beyond limit: skip — tree icon on the card handles expansion
@@ -849,22 +877,36 @@ class FamilyTreeRenderer
                         'type' => 'parent-child',
                         'line' => 'self',
                         'lineIndex' => 0,
+                        'familyXref' => $parentFamily->xref(),
                     ];
                     $this->collectSiblings($parentFamily, $xref, $unknownNodeId, 0, $generation + 1);
                 }
             }
         }
 
-        // Spouse's parent families
-        foreach ($person->spouseFamilies() as $spFam) {
+        // Spouse parent families — one ancestor line per spouse family,
+        // using exactly the same family list/order as the rendered spouse cards.
+        // This avoids wife-A / wife-B mismatches after gender-swapped rendering.
+        if ($spouseFamilies === []) {
+            $spouseFamilies = $person->spouseFamilies()->toArray();
+            usort($spouseFamilies, [$this, 'compareByMarriageDate']);
+        }
+
+        foreach ($spouseFamilies as $spouseFamilyIndex => $spFam) {
             if ($throughFamily instanceof Family && $spFam->xref() !== $throughFamily->xref()) {
                 continue;
             }
-            $spouse = $spFam->spouse($person);
-            if (!$spouse instanceof Individual) continue;
 
+            $spouse = $spFam->spouse($person);
+            if (!$spouse instanceof Individual) {
+                continue;
+            }
+
+            $lineIndex = $spouseFamilyIndex + 1;
             $spParentFam = $this->bestParentFamily($spouse);
-            if (!$spParentFam instanceof Family) continue;
+            if (!$spParentFam instanceof Family) {
+                continue;
+            }
 
             $spParent = $spParentFam->husband() ?? $spParentFam->wife();
             if ($spParent instanceof Individual) {
@@ -877,7 +919,8 @@ class FamilyTreeRenderer
                         'to'   => $childNodeId,
                         'type' => 'parent-child',
                         'line' => 'spouse',
-                        'lineIndex' => 1,
+                        'lineIndex' => $lineIndex,
+                        'familyXref' => $spParentFam->xref(),
                     ];
                 }
                 // Beyond limit: skip — tree icon on the card handles expansion
@@ -923,12 +966,12 @@ class FamilyTreeRenderer
                         'to'   => $childNodeId,
                         'type' => 'parent-child',
                         'line' => 'spouse',
-                        'lineIndex' => 1,
+                        'lineIndex' => $lineIndex,
+                        'familyXref' => $spParentFam->xref(),
                     ];
                     $this->collectSiblings($spParentFam, $spouse->xref(), $unknownNodeId, 0, $generation + 1);
                 }
             }
-            break; // One spouse ancestor line only
         }
     }
 
@@ -1045,19 +1088,34 @@ class FamilyTreeRenderer
         foreach ($a->facts(Gedcom::MARRIAGE_EVENTS, true) as $fact) {
             if ($fact->tag() === 'FAM:MARR') {
                 $d = $fact->date()->julianDay();
-                if ($d > 0) { $aDate = $d; break; }
+                if ($d > 0) {
+                    $aDate = $d;
+                    break;
+                }
             }
         }
         foreach ($b->facts(Gedcom::MARRIAGE_EVENTS, true) as $fact) {
             if ($fact->tag() === 'FAM:MARR') {
                 $d = $fact->date()->julianDay();
-                if ($d > 0) { $bDate = $d; break; }
+                if ($d > 0) {
+                    $bDate = $d;
+                    break;
+                }
             }
         }
-        if ($aDate === 0 && $bDate === 0) return 0;
-        if ($aDate === 0) return 1;
-        if ($bDate === 0) return -1;
-        return $aDate <=> $bDate;
+
+        if ($aDate !== $bDate) {
+            if ($aDate === 0) {
+                return 1;
+            }
+            if ($bDate === 0) {
+                return -1;
+            }
+            return $aDate <=> $bDate;
+        }
+
+        // Stable tie-breaker so spouse/family order stays deterministic across page loads and AJAX calls.
+        return strcmp($a->xref(), $b->xref());
     }
 
     /**
@@ -1117,7 +1175,7 @@ class FamilyTreeRenderer
             return 0;
         }
 
-        return preg_match_all('/\n\d+\s+' . preg_quote($tag, '/') . '\b/', $gedcom);
+        return preg_match_all('/\n\d+\s+' . preg_quote($tag, '/') . '\b/', $gedcom) ?: 0;
     }
 
     /**
@@ -1221,7 +1279,7 @@ class FamilyTreeRenderer
             'nodes' => array_values($this->nodes),
             'edges' => $this->edges,
             'rootId' => $rootId,
-        ], JSON_UNESCAPED_UNICODE);
+        ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -1247,7 +1305,7 @@ class FamilyTreeRenderer
             'nodes' => array_values($this->nodes),
             'edges' => $this->edges,
             'rootId' => $rootId,
-        ], JSON_UNESCAPED_UNICODE);
+        ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -1303,7 +1361,7 @@ class FamilyTreeRenderer
             'nodes' => array_values($this->nodes),
             'edges' => $this->edges,
             'childRootIds' => $childRootIds,
-        ], JSON_UNESCAPED_UNICODE);
+        ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -1373,7 +1431,7 @@ class FamilyTreeRenderer
             return $aExact <=> $bExact ?: ($aPos ?? 999) <=> ($bPos ?? 999);
         });
 
-        return json_encode($results, JSON_UNESCAPED_UNICODE);
+        return json_encode($results, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
     }
 
     private function pushSearchResult(array &$results, object $row, Tree $tree): void
@@ -1397,14 +1455,14 @@ class FamilyTreeRenderer
                  'ć'=>'c','č'=>'c','ç'=>'c','è'=>'e','é'=>'e','ê'=>'e','ë'=>'e','ę'=>'e',
                  'ì'=>'i','í'=>'i','î'=>'i','ï'=>'i','ł'=>'l','ñ'=>'n','ń'=>'n',
                  'ò'=>'o','ó'=>'o','ô'=>'o','õ'=>'o','ö'=>'o','ø'=>'o',
-                 'ś'=>'s','š'=>'s','ù'=>'u','ú'=>'u','û'=>'u','ü'=>'u',
+                 'ś'=>'s','š'=>'s','ù'=>'u','ú'=>'u','û'=>'u','ü'=>'u','ů'=>'u',
                  'ý'=>'y','ÿ'=>'y','ź'=>'z','ż'=>'z','ž'=>'z',
                  'À'=>'A','Á'=>'A','Â'=>'A','Ã'=>'A','Ä'=>'A','Å'=>'A','Ą'=>'A',
                  'Ć'=>'C','Č'=>'C','Ç'=>'C','È'=>'E','É'=>'E','Ê'=>'E','Ë'=>'E','Ę'=>'E',
                  'Ì'=>'I','Í'=>'I','Î'=>'I','Ï'=>'I','Ł'=>'L','Ñ'=>'N','Ń'=>'N',
                  'Ò'=>'O','Ó'=>'O','Ô'=>'O','Õ'=>'O','Ö'=>'O','Ø'=>'O',
-                 'Ś'=>'S','Š'=>'S','Ù'=>'U','Ú'=>'U','Û'=>'U','Ü'=>'U',
-                 'Ý'=>'Y','Ź'=>'Z','Ż'=>'Z','Ž'=>'Z'];
+                 'Ś'=>'S','Š'=>'S','Ù'=>'U','Ú'=>'U','Û'=>'U','Ü'=>'U','Ů'=>'U',
+                 'Ý'=>'Y','Ÿ'=>'Y','Ź'=>'Z','Ż'=>'Z','Ž'=>'Z'];
         return strtr($text, $map);
     }
 

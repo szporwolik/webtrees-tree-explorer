@@ -14,9 +14,9 @@ use Fisharebest\Webtrees\I18N;
 
 class NavigatorActionMissing extends Exception
 {
-    public function __construct(string $action = null)
+    public function __construct(?string $action = null)
     {
-        $message = I18N::translate('Unknown action:') . ' <pre>' . e($action) . '</pre>';
+        $message = I18N::translate('Unknown action:') . ' ' . e($action ?? '(none)');
         parent::__construct($message);
     }
 }

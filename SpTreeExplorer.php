@@ -13,7 +13,6 @@ namespace SpTreeExplorer\FamilyNav;
 use Aura\Router\RouterContainer;
 use Aura\Router\Map;
 use Fig\Http\Message\RequestMethodInterface;
-use Fisharebest\Localization\Translation;
 use Fisharebest\Webtrees\Auth;
 use Fisharebest\Webtrees\FlashMessages;
 use Fisharebest\Webtrees\I18N;
@@ -29,6 +28,8 @@ use Fisharebest\Webtrees\Module\ModuleCustomInterface;
 use Fisharebest\Webtrees\Module\ModuleCustomTrait;
 use Fisharebest\Webtrees\Module\ModuleMenuInterface;
 use Fisharebest\Webtrees\Module\ModuleMenuTrait;
+use Fisharebest\Webtrees\Module\ModuleTabInterface;
+use Fisharebest\Webtrees\Module\ModuleTabTrait;
 use Fisharebest\Webtrees\Tree;
 use Fisharebest\Webtrees\Registry;
 use Fisharebest\Webtrees\Validator;
@@ -48,12 +49,13 @@ use SpTreeExplorer\FamilyNav\Traits\DiagramChartFeature;
  * @license https://opensource.org/licenses/GPL-3.0 GNU General Public License v3.0
  */
 class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, ModuleCustomInterface,
-    ModuleChartInterface, ModuleConfigInterface, ModuleMenuInterface
+    ModuleChartInterface, ModuleConfigInterface, ModuleMenuInterface, ModuleTabInterface
 {
     use ModuleCustomTrait;
     use ModuleGlobalTrait;
     use ModuleConfigTrait;
     use ModuleMenuTrait;
+    use ModuleTabTrait;
     use DiagramChartFeature;
 
     public function customModuleAuthorName(): string
@@ -63,7 +65,7 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
 
     public function customModuleVersion(): string
     {
-        return '0.6.0';
+        return '0.7.0';
     }
 
     public function customModuleLatestVersionUrl(): string
@@ -83,10 +85,18 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
 
     public function customTranslations(string $language): array
     {
-        $file = $this->resourcesFolder() . 'lang' . DIRECTORY_SEPARATOR . $language . '.mo';
-        if (file_exists($file)) {
-            return (new Translation($file))->asArray();
+        $directory  = $this->resourcesFolder() . 'lang' . DIRECTORY_SEPARATOR;
+        $normalized = str_replace('_', '-', $language);
+        $base       = explode('-', $normalized)[0];
+
+        foreach (array_unique([$language, $normalized, $base]) as $locale) {
+            $file = $directory . $locale . '.php';
+
+            if (file_exists($file)) {
+                return require $file;
+            }
         }
+
         return [];
     }
 
@@ -98,6 +108,65 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
     public function description(): string
     {
         return I18N::translate('An interactive tree explorer showing ancestors and descendants.');
+    }
+
+    public function defaultTabOrder(): int
+    {
+        return 70;
+    }
+
+    public function canLoadAjax(): bool
+    {
+        return false;
+    }
+
+    public function hasTabContent(Individual $individual): bool
+    {
+        return $individual->canShow();
+    }
+
+    public function isGrayedOut(Individual $individual): bool
+    {
+        return !$individual->canShow();
+    }
+
+    public function getTabContent(Individual $individual): string
+    {
+        $prefix = 'spT01';
+        $renderer = new FamilyTreeRenderer(
+            $prefix,
+            $this->name(),
+            $individual->tree(),
+            $individual->xref(),
+            $this->customModuleVersion()
+        );
+        $renderer->setDefaults(
+            $this->getPreference('profile_default_details', '1') === '1',
+            $this->getPreference('profile_default_advanced', '1') === '1',
+            $this->getPreference('profile_default_sources', '1') === '1'
+        );
+        // Profile tab: load a compact overview around the current person.
+        $renderer->setGenerationLimits(2, -2); // grandparents up, grandchildren down
+        $renderer->setProfileTabOptions(true, $this->chartUrl($individual));
+        $renderer->prepare();
+
+        [$cardHtml, $initScript] = $renderer->buildViewport($individual, true);
+
+        return view($this->name() . '::modules/spNavigator/diagram', [
+            'individual'   => $individual,
+            'cardHtml'     => $cardHtml,
+            'initScript'   => $initScript,
+            'module'       => $this->name(),
+            'pageHeading'  => $this->pageHeading(),
+            'showForm'     => false,
+            'tree'         => $individual->tree(),
+            'inlineScript' => true,
+        ]);
+    }
+
+    public function chartBoxMenu(Individual $individual): ?Menu
+    {
+        return $this->chartMenu($individual);
     }
 
     /**
@@ -116,7 +185,7 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
                 'tree'   => $tree->name(),
                 'xref'   => $xref,
             ]),
-            'menu-chart-tree',
+            'menu-sptree',
             ['rel' => 'nofollow']
         );
     }
@@ -192,7 +261,7 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
                 // Build empty viewport with search functionality
                 $prefix = 'spN01';
                 $moduleName = Validator::attributes($request)->string('module');
-            
+
                 $expandUrl = route(SpTreeExplorerHandler::class, [
                     'module'   => $moduleName,
                     'action'   => 'NodeExpand',
@@ -218,10 +287,12 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
                     'defaultDetails'          => $this->getPreference('default_details', '1') === '1',
                     'defaultAdvancedControls' => $this->getPreference('default_advanced', '1') === '1',
                     'defaultSources'          => $this->getPreference('default_sources', '0') === '1',
+                    'profileView'             => false,
+                    'fullPageUrl'             => '',
                 ]);
 
-                $emptyTreeData = json_encode(['nodes' => [], 'edges' => [], 'rootId' => null]);
-                $initScript = 'wtpInitCSSColors(); var ' . $prefix . 'Controller = new FamilyNavigator('
+                $emptyTreeData = json_encode(['nodes' => [], 'edges' => [], 'rootId' => null], JSON_HEX_TAG | JSON_HEX_AMP);
+                $initScript = 'wtpInitCSSColors(); var spNavController = new FamilyNavigator('
                     . json_encode($prefix) . ', true, '
                     . $emptyTreeData . ', '
                     . json_encode($expandUrl) . ', '
@@ -288,10 +359,13 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
         $this->layout = 'layouts/administration';
 
         return $this->viewResponse($this->name() . '::modules/spNavigator/settings', [
-            'title'            => $this->title(),
-            'defaultDetails'   => $this->getPreference('default_details', '1'),
-            'defaultAdvanced'  => $this->getPreference('default_advanced', '1'),
-            'defaultSources'   => $this->getPreference('default_sources', '0'),
+            'title'                  => $this->title(),
+            'defaultDetails'         => $this->getPreference('default_details', '1'),
+            'defaultAdvanced'        => $this->getPreference('default_advanced', '1'),
+            'defaultSources'         => $this->getPreference('default_sources', '0'),
+            'profileDefaultDetails'  => $this->getPreference('profile_default_details', '1'),
+            'profileDefaultAdvanced' => $this->getPreference('profile_default_advanced', '1'),
+            'profileDefaultSources'  => $this->getPreference('profile_default_sources', '1'),
         ]);
     }
 
@@ -300,11 +374,12 @@ class SpTreeExplorer extends AbstractModule implements ModuleGlobalInterface, Mo
      */
     public function postAdminAction(ServerRequestInterface $request): ResponseInterface
     {
-        $params = (array) $request->getParsedBody();
-
-        $this->setPreference('default_details', ($params['default_details'] ?? '') === '1' ? '1' : '0');
-        $this->setPreference('default_advanced', ($params['default_advanced'] ?? '') === '1' ? '1' : '0');
-        $this->setPreference('default_sources', ($params['default_sources'] ?? '') === '1' ? '1' : '0');
+        $this->setPreference('default_details', Validator::parsedBody($request)->string('default_details', '') === '1' ? '1' : '0');
+        $this->setPreference('default_advanced', Validator::parsedBody($request)->string('default_advanced', '') === '1' ? '1' : '0');
+        $this->setPreference('default_sources', Validator::parsedBody($request)->string('default_sources', '') === '1' ? '1' : '0');
+        $this->setPreference('profile_default_details', Validator::parsedBody($request)->string('profile_default_details', '') === '1' ? '1' : '0');
+        $this->setPreference('profile_default_advanced', Validator::parsedBody($request)->string('profile_default_advanced', '') === '1' ? '1' : '0');
+        $this->setPreference('profile_default_sources', Validator::parsedBody($request)->string('profile_default_sources', '') === '1' ? '1' : '0');
 
         $message = I18N::translate('The preferences for the module "%s" have been updated.', $this->title());
         FlashMessages::addMessage($message, 'success');

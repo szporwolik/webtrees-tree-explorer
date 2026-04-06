@@ -11,21 +11,63 @@ use Fisharebest\Webtrees\View;
  * @var string      $pageHeading
  * @var bool        $showForm
  * @var object      $tree
+ * @var bool|null   $inlineScript
  */
 
+$inlineScript = $inlineScript ?? false;
 ?>
 
-<div class="wtp-plugin-root">
+<div class="wtp-plugin-root<?= $inlineScript ? ' sp-embedded-view' : ' sp-page-view' ?>">
 <div class="sp-full-space">
     <?= $cardHtml ?>
 </div>
 
 <?php if ($individual !== null || $initScript !== '') : ?>
-    <?php View::push('javascript') ?>
-    <script>
-        <?= $initScript ?>
-    </script>
-    <?php View::endpush() ?>
+    <?php if ($inlineScript) : ?>
+        <script>
+            <?= $initScript ?>
+            if (typeof spNavController !== 'undefined') {
+                window.requestAnimationFrame(function () {
+                    if (spNavController && spNavController.measureAndRender) {
+                        spNavController.measureAndRender();
+                        if (spNavController._setCurrentXref) {
+                            spNavController._setCurrentXref(spNavController.baseXref || null);
+                        }
+                        if (spNavController.startExpanded) {
+                            spNavController.focusOrigin();
+                        }
+                    }
+                });
+
+                document.addEventListener('shown.bs.tab', function () {
+                    window.requestAnimationFrame(function () {
+                        if (spNavController && spNavController.measureAndRender) {
+                            spNavController.measureAndRender();
+                            if (spNavController._setCurrentXref) {
+                                spNavController._setCurrentXref(spNavController.baseXref || null);
+                            }
+                            if (spNavController.startExpanded) {
+                                spNavController.focusOrigin();
+                            }
+                        }
+                    });
+                });
+            }
+        </script>
+    <?php else : ?>
+        <?php View::push('javascript') ?>
+        <script>
+            <?= $initScript ?>
+            if (typeof spNavController !== 'undefined') {
+                window.requestAnimationFrame(function () {
+                    if (spNavController && spNavController.measureAndRender) {
+                        spNavController.measureAndRender();
+                    }
+                });
+            }
+        </script>
+        <?php View::endpush() ?>
+    <?php endif; ?>
 <?php endif; ?>
 
 </div>

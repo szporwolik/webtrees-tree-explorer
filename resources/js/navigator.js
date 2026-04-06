@@ -40,12 +40,17 @@ var wtpCSSColors = {
 function wtpInitCSSColors() {
     var root = document.querySelector('.wtp-plugin-root') || document.documentElement;
     var styles = getComputedStyle(root);
-    
+
+    var colorRe = /^#[0-9a-fA-F]{3,8}$|^rgba?\(|^color-mix\(/;
     function readToken(name, fallback) {
         var value = styles.getPropertyValue(name).trim();
+        if (value && !colorRe.test(value)) {
+            console.warn('SP Tree Explorer: ignoring invalid CSS color token', name, value);
+            return fallback;
+        }
         return value || fallback;
     }
-    
+
     wtpCSSColors.ringBrokenFill = readToken('--wtp-ring-broken-fill', '#f1f3f5');
     wtpCSSColors.ringBrokenStroke = readToken('--wtp-ring-broken-stroke', '#c5c9d1');
     wtpCSSColors.divorceLine = readToken('--wtp-divorce-line', '#e74c3c');
@@ -139,7 +144,7 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.edgeMap        = {};   // stores edge metadata
 
     // Active ancestor lines (for ancestor switching)
-    this.activeLines    = {};   // nodeId -> lineIndex (0 = self/default, 1 = spouse)
+    this.activeLines    = {};   // nodeId -> lineIndex (0 = self/default, 1..n = spouse families)
 
     // Track the currently displayed root person xref (for share links)
     this.currentRootXref = '';
@@ -147,11 +152,40 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     // Base person xref — the person the tree was originally loaded for (home button)
     this.baseXref = this.container ? this.container.getAttribute('data-base-xref') || '' : '';
 
+    // Embedded-profile mode metadata
+    this.profileView = this.container ? this.container.getAttribute('data-profile-view') === '1' : false;
+    this.fullPageUrl = this.container ? this.container.getAttribute('data-full-page-url') || '' : '';
+
     // Expansion history — records each AJAX expansion for share-link replay
     this._expansionHistory = []; // [{type:'lazy'|'ancestor', fid, pid, dir?, lineIndex?}]
 
+    // Tree generation counter — incremented on navigateTo to discard stale AJAX callbacks
+    this._treeGeneration = 0;
+
     // Debug mode — append ?debug=1 to URL to enable console logging
     this.debug = (new URL(window.location.href).searchParams.get('debug') === '1');
+
+    // Re-render when a hidden container becomes visible (e.g. profile-page tab).
+    this._lastContainerSize = { width: 0, height: 0 };
+    if (this.container && typeof ResizeObserver !== 'undefined') {
+        this._containerObserver = new ResizeObserver(function (entries) {
+            for (var i = 0; i < entries.length; i++) {
+                var rect = entries[i].contentRect;
+                var wasHidden = nav._lastContainerSize.width === 0 || nav._lastContainerSize.height === 0;
+                nav._lastContainerSize = { width: rect.width, height: rect.height };
+                if (rect.width > 0 && rect.height > 0 && wasHidden) {
+                    window.requestAnimationFrame(function () {
+                        nav.measureAndRender();
+                        nav._setCurrentXref(nav.baseXref || null);
+                        if (nav.startExpanded) {
+                            nav.focusOrigin();
+                        }
+                    });
+                }
+            }
+        });
+        this._containerObserver.observe(this.container);
+    }
 
     // Sources visibility state (read from data attribute, default: off)
     var defaultSources = this.container ? this.container.getAttribute('data-default-sources') : '0';
@@ -196,6 +230,7 @@ function FamilyNavigator(cardPrefix, startExpanded, treeData, expandUrl, searchU
     this.initPanZoom();
     this.initToolbar();
     this.initSearch();
+    this._initConnectivityWatch();
 
     // Restore view state from URL — expansions, then zoom/position
     var pendingExp = urlParams.get('exp');
@@ -325,6 +360,20 @@ FamilyNavigator.prototype.buildIndex = function (data) {
             if (jb === 0) return -1;
             return ja - jb;
         });
+    }
+
+    // Mark nodes that have multiple ancestor lines (different lineIndex values
+    // among their parent edges) so getVisibleChildren can filter correctly.
+    for (var childId in this.parentEdges) {
+        var pe = this.parentEdges[childId];
+        var lineIndices = {};
+        for (var ei = 0; ei < pe.length; ei++) {
+            if (pe[ei].lineIndex !== undefined) lineIndices[pe[ei].lineIndex] = true;
+        }
+        if (Object.keys(lineIndices).length > 1) {
+            var cn = this.nodeMap[childId];
+            if (cn) cn.hasMultipleAncestorLines = true;
+        }
     }
 
     this._dbg('buildIndex', 'nodes=' + data.nodes.length, 'edges=' + data.edges.length, 'rootId=' + data.rootId);
@@ -507,6 +556,9 @@ FamilyNavigator.prototype.nodeWidth = function (nodeId) {
         var w = this.CARD_W;
         for (var fi = 0; fi < node.families.length; fi++) {
             w += this.COUPLE_GAP + this.CARD_W;
+            if (fi > 0) {
+                w += this.MULTI_SPOUSE_SEP;
+            }
         }
         return w;
     }
@@ -633,22 +685,97 @@ FamilyNavigator.prototype.positionSubtree = function (nodeId, x, y, _visited) {
     }
 
     var childY = y + nodeH + this.V_GAP;
-    var childX = nodeCenterX - childrenTotalW / 2;
 
-    // First pass: position all children
-    for (var i = 0; i < children.length; i++) {
-        var cid = children[i];
-        var cLayout = this.layoutMap[cid];
-        this.positionSubtree(cid, childX, childY, _visited);
-        var gap = this.H_GAP;
-        if (i + 1 < children.length) {
-            var prevFi = this._childFamilyIndex(nodeId, children[i]);
-            var nextFi = this._childFamilyIndex(nodeId, children[i + 1]);
-            if (prevFi !== nextFi && prevFi >= 0 && nextFi >= 0) {
-                gap += this.FAMILY_GROUP_GAP;
+    var familyGroups = [];
+    var currentGroup = null;
+    for (var ci = 0; ci < children.length; ci++) {
+        var groupChildId = children[ci];
+        var groupFamilyIndex = this._childFamilyIndex(nodeId, groupChildId);
+        if (!currentGroup || currentGroup.familyIndex !== groupFamilyIndex) {
+            currentGroup = { familyIndex: groupFamilyIndex, children: [], width: 0 };
+            familyGroups.push(currentGroup);
+        }
+        currentGroup.children.push(groupChildId);
+    }
+
+    for (var gi = 0; gi < familyGroups.length; gi++) {
+        var group = familyGroups[gi];
+        var groupWidth = 0;
+        for (var gj = 0; gj < group.children.length; gj++) {
+            if (gj > 0) {
+                groupWidth += this.H_GAP;
+            }
+            groupWidth += this.layoutMap[group.children[gj]].subtreeW;
+        }
+        group.width = groupWidth;
+    }
+
+    var useFamilyAlignedLayout = familyGroups.length > 1;
+    for (var fgi = 0; fgi < familyGroups.length; fgi++) {
+        if (familyGroups[fgi].familyIndex < 0) {
+            useFamilyAlignedLayout = false;
+            break;
+        }
+    }
+
+    if (useFamilyAlignedLayout) {
+        var groupGap = this.H_GAP + this.FAMILY_GROUP_GAP;
+        var groupBoxes = [];
+
+        for (var gbi = 0; gbi < familyGroups.length; gbi++) {
+            var famGroup = familyGroups[gbi];
+            var desiredCenter = this.getCoupleLineCenterX(layout, famGroup.familyIndex);
+            var left = desiredCenter - famGroup.width / 2;
+
+            if (groupBoxes.length > 0) {
+                var prevBox = groupBoxes[groupBoxes.length - 1];
+                left = Math.max(left, prevBox.right + groupGap);
+            }
+
+            groupBoxes.push({
+                left: left,
+                right: left + famGroup.width
+            });
+        }
+
+        if (groupBoxes.length > 0) {
+            var spanLeft = groupBoxes[0].left;
+            var spanRight = groupBoxes[groupBoxes.length - 1].right;
+            var shift = nodeCenterX - ((spanLeft + spanRight) / 2);
+            for (var sgi = 0; sgi < groupBoxes.length; sgi++) {
+                groupBoxes[sgi].left += shift;
+                groupBoxes[sgi].right += shift;
             }
         }
-        childX += cLayout.subtreeW + gap;
+
+        for (var pgi = 0; pgi < familyGroups.length; pgi++) {
+            var placedGroup = familyGroups[pgi];
+            var groupChildX = groupBoxes[pgi].left;
+            for (var pgj = 0; pgj < placedGroup.children.length; pgj++) {
+                var placedChildId = placedGroup.children[pgj];
+                var placedLayout = this.layoutMap[placedChildId];
+                this.positionSubtree(placedChildId, groupChildX, childY, _visited);
+                groupChildX += placedLayout.subtreeW + this.H_GAP;
+            }
+        }
+    } else {
+        var childX = nodeCenterX - childrenTotalW / 2;
+
+        // First pass: position all children
+        for (var i = 0; i < children.length; i++) {
+            var cid = children[i];
+            var cLayout = this.layoutMap[cid];
+            this.positionSubtree(cid, childX, childY, _visited);
+            var gap = this.H_GAP;
+            if (i + 1 < children.length) {
+                var prevFi = this._childFamilyIndex(nodeId, children[i]);
+                var nextFi = this._childFamilyIndex(nodeId, children[i + 1]);
+                if (prevFi !== nextFi && prevFi >= 0 && nextFi >= 0) {
+                    gap += this.FAMILY_GROUP_GAP;
+                }
+            }
+            childX += cLayout.subtreeW + gap;
+        }
     }
 
     // Second pass: ensure no children overlap with their siblings
@@ -711,6 +838,9 @@ FamilyNavigator.prototype.layoutTree = function () {
     this.layoutMap = {};
 
     var visualRoot = this.findVisualRoot();
+    if (!visualRoot || !this.nodeMap[visualRoot]) {
+        return;
+    }
     this.measureSubtree(visualRoot);
     this.positionSubtree(visualRoot, 0, 0);
 
@@ -748,11 +878,12 @@ FamilyNavigator.prototype.layoutTree = function () {
             var childNode = this.nodeMap[orphanChildId];
             if (childNode && childNode.families && childNode.families.length > 0) {
                 if (orphanEdge.lineIndex === 0) {
-                    // Person side → center above left (person) card
+                    // Person side → center above the main person card.
                     targetCenterX = cLayout.x + this.CARD_W / 2;
                 } else {
-                    // Spouse side → center above right (first spouse) card
-                    targetCenterX = cLayout.x + this.CARD_W + this.COUPLE_GAP + this.CARD_W / 2;
+                    // Spouse side → center above the matching spouse card (1..n).
+                    var cardOffset = orphanEdge.lineIndex * (this.CARD_W + this.COUPLE_GAP);
+                    targetCenterX = cLayout.x + cardOffset + this.CARD_W / 2;
                 }
             }
         }
@@ -887,11 +1018,53 @@ FamilyNavigator.prototype.render = function () {
         }
     }
 
+    this._updateOriginHighlight();
+
     // Draw connectors on canvas
     this.drawConnectors(canvasW, canvasH);
 
     // Render floating ancestor icons in overlay
     this._renderIconOverlay(canvasW, canvasH);
+};
+
+/**
+ * Keep the origin highlight on the actual focused/root person card,
+ * even when the root couple was visually gender-swapped.
+ */
+FamilyNavigator.prototype._updateOriginHighlight = function () {
+    if (!this.cardElements || !this.treeData) return;
+
+    var rootId = this.treeData.rootId;
+    var targetXref = this.currentRootXref || this.baseXref || '';
+
+    for (var nodeId in this.cardElements) {
+        var wrapper = this.cardElements[nodeId];
+        if (!wrapper) continue;
+
+        var cards = wrapper.querySelectorAll('.sp-card');
+        if (!cards || cards.length === 0) continue;
+
+        for (var i = 0; i < cards.length; i++) {
+            cards[i].classList.remove('sp-origin');
+        }
+
+        if (nodeId !== rootId) {
+            continue;
+        }
+
+        var matched = false;
+        for (var ci = 0; ci < cards.length; ci++) {
+            if ((cards[ci].dataset.xref || '') === targetXref && targetXref !== '') {
+                cards[ci].classList.add('sp-origin');
+                matched = true;
+                break;
+            }
+        }
+
+        if (!matched && cards[0]) {
+            cards[0].classList.add('sp-origin');
+        }
+    }
 };
 
 /**
@@ -992,7 +1165,7 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
 
     // Check which ancestor connections are actually visible (respecting active line switching)
     var personAncestorsVisible = false;
-    var spouseAncestorsVisible = false;
+    var spouseAncestorsVisible = {};
     var parentEdgesHere = this.parentEdges[node.id] || [];
     for (var ei = 0; ei < parentEdgesHere.length; ei++) {
         var pe = parentEdgesHere[ei];
@@ -1000,18 +1173,27 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
         var parentLayout = this.layoutMap[pe.from];
         if (!parentLayout || parentLayout.x === undefined) continue;
         if (pe.lineIndex !== undefined) {
-            // Ancestor-line edge: lineIndex directly indicates which side
-            if (pe.lineIndex === 1) {
-                spouseAncestorsVisible = true;
-            } else {
+            // Ancestor-line edge: 0 = person side, 1..n = spouse cards in family order.
+            if (pe.lineIndex === 0) {
                 personAncestorsVisible = true;
+            } else {
+                spouseAncestorsVisible[pe.lineIndex] = true;
             }
         } else {
-            // Downward parent-child edge: use originalChildXref to find which side
+            // Downward parent-child edge: use originalChildXref to find which side.
             var oxref = node.originalChildXref;
-            var firstSpouse = (node.families && node.families.length > 0) ? node.families[0].spouse : null;
-            if (oxref && firstSpouse && firstSpouse.xref === oxref) {
-                spouseAncestorsVisible = true;
+            var spouseMatchIndex = -1;
+            if (oxref && node.families) {
+                for (var fmi = 0; fmi < node.families.length; fmi++) {
+                    var candidateSpouse = node.families[fmi].spouse;
+                    if (candidateSpouse && candidateSpouse.xref === oxref) {
+                        spouseMatchIndex = fmi;
+                        break;
+                    }
+                }
+            }
+            if (spouseMatchIndex >= 0) {
+                spouseAncestorsVisible[spouseMatchIndex + 1] = true;
             } else {
                 personAncestorsVisible = true;
             }
@@ -1021,9 +1203,9 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
     this._dbg('ancestorIcons', node.id,
         'person=' + (node.person ? node.person.xref : '?'),
         'pHasParents=' + personHasParents, 'pVis=' + personAncestorsVisible,
-        'sVis=' + spouseAncestorsVisible,
+        'sVis=' + Object.keys(spouseAncestorsVisible).join(','),
         'oxref=' + node.originalChildXref,
-        'spouse0=' + (node.families && node.families.length > 0 && node.families[0].spouse ? node.families[0].spouse.xref : 'none'),
+        'spouses=' + (node.families ? node.families.length : 0),
         'edges=' + parentEdgesHere.length,
         'gen=' + node.generation,
         'swap=' + (node.genderSwapped || false));
@@ -1048,14 +1230,15 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
     }
     for (var si = 0; si < spouseCards.length; si++) {
         var sc = spouseCards[si];
+        var spouseLineIndex = si + 1;
         if (sc.family.spouse && sc.family.spouseHasParents) {
-            if (si === 0 && spouseAncestorsVisible) continue;
+            if (spouseAncestorsVisible[spouseLineIndex]) continue;
             wrapper._ancestorIcons.push({
                 xref: sc.family.spouse.xref, target: 'spouse', index: si,
                 nodeId: node.id,
                 familyXref: sc.family.spouseParentFamilyXref || '',
                 childXref: sc.family.spouse.xref,
-                lineIndex: 1,
+                lineIndex: spouseLineIndex,
                 rebaseOnly: node.generation < 0
             });
         }
@@ -1068,7 +1251,6 @@ FamilyNavigator.prototype.createCardElement = function (node, layout) {
  * Create a single person card DOM element.
  */
 FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
-    var nav = this;
     var genderClass = personData.sex === 'M' ? 'sp-male' : (personData.sex === 'F' ? 'sp-female' : 'sp-unknown');
     var card = document.createElement('div');
     card.className = 'sp-card ' + genderClass + (isOrigin ? ' sp-origin' : '') + (personData.isUnknown ? ' sp-card-unknown' : '') + (personData.isPrivate ? ' sp-card-private' : '');
@@ -1109,7 +1291,16 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
         card.appendChild(ribbon);
     }
 
-    // Person info
+    card.appendChild(this._createPersonInfoSection(personData));
+    card.appendChild(this._createCardActions(personData));
+
+    return card;
+};
+
+/**
+ * Build person info section: avatar, name, dates, parent ages at birth.
+ */
+FamilyNavigator.prototype._createPersonInfoSection = function (personData) {
     var person = document.createElement('div');
     person.className = 'sp-person';
 
@@ -1121,11 +1312,14 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     if (personData.thumb) {
         avatarWrap.href = personData.url;
         avatarWrap.title = personData.name;
+        avatarWrap.classList.add('sp-img-loading');
         var img = document.createElement('img');
         img.className = 'sp-avatar';
-        img.src = personData.thumb;
         img.alt = personData.name;
         img.loading = 'lazy';
+        img.onload = function () { avatarWrap.classList.remove('sp-img-loading'); };
+        img.onerror = function () { avatarWrap.classList.remove('sp-img-loading'); };
+        img.src = personData.thumb;
         avatarWrap.appendChild(img);
     } else {
         avatarWrap.href = personData.url + '#media';
@@ -1144,7 +1338,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     nameLink.target = '_blank';
     nameLink.rel = 'noopener';
     nameLink.setAttribute('aria-label', __('View %s profile', personData.name));
-    
+
     var nameStrong = document.createElement('strong');
     nameStrong.textContent = personData.name;
     nameLink.appendChild(nameStrong);
@@ -1215,9 +1409,14 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     }
 
     person.appendChild(info);
-    card.appendChild(person);
+    return person;
+};
 
-    // Actions row
+/**
+ * Build the actions row for a person card (sources/notes/media links + edit buttons).
+ */
+FamilyNavigator.prototype._createCardActions = function (personData) {
+    var nav = this;
     var actions = document.createElement('div');
     actions.className = 'sp-card-actions';
 
@@ -1324,9 +1523,7 @@ FamilyNavigator.prototype.createPersonCard = function (personData, isOrigin) {
     }
 
     actions.appendChild(actionsRight);
-    card.appendChild(actions);
-
-    return card;
+    return actions;
 };
 
 /**
@@ -1690,7 +1887,8 @@ FamilyNavigator.prototype.getPersonBottomY = function(layout) {
  * Get spouse card left X for given spouse index
  */
 FamilyNavigator.prototype.getSpouseLeftX = function(layout, spouseIndex) {
-    return layout.x + this.CARD_W + this.COUPLE_GAP + spouseIndex * (this.CARD_W + this.COUPLE_GAP);
+    var extraGap = spouseIndex > 0 ? spouseIndex * this.MULTI_SPOUSE_SEP : 0;
+    return layout.x + this.CARD_W + this.COUPLE_GAP + spouseIndex * (this.CARD_W + this.COUPLE_GAP) + extraGap;
 };
 
 /**
@@ -1731,7 +1929,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
 
     // Use theme-portable color from CSS token
     var connectorColor = wtpCSSColors.connectorLine;
-    
+
     ctx.strokeStyle = connectorColor;
     ctx.fillStyle = connectorColor;
     var desiredLineWidth = 2;
@@ -1743,7 +1941,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
     ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
-    
+
     // Use butt caps so line ends don't protrude past endpoints.
     // Rounded appearance is provided by joins and explicit endpoint dots.
     ctx.lineCap = 'butt';
@@ -1763,87 +1961,120 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         ctx.fill();
     }
 
-    // ====================================================================================
-    // PARTNER/SPOUSE CONNECTORS — Horizontal lines at card vertical center
-    // ====================================================================================
-    // Track staggered Y offsets for each family so child forks can originate from correct position
-    var staggeredOffsets = {};  // nodeId -> { familyIndex -> yOffset }
-    
+    function getFamilyAnchorX(nodeId, layout, familyIndex) {
+        var node = self.nodeMap[nodeId];
+        var wrapper = self.cardElements[nodeId];
+        if (wrapper) {
+            var wRect = wrapper.getBoundingClientRect();
+            var cards = wrapper.querySelectorAll('.sp-card');
+            var spouseCard = cards[familyIndex + 1];
+            if (node && node.families && node.families.length > 1 && spouseCard) {
+                var spouseRect = spouseCard.getBoundingClientRect();
+                return snap(layout.x + ((spouseRect.left + spouseRect.width / 2) - wRect.left) / self.zoomLevel);
+            }
+            var lines = wrapper.querySelectorAll('.sp-couple-line');
+            if (lines[familyIndex]) {
+                var lineRect = lines[familyIndex].getBoundingClientRect();
+                return snap(layout.x + ((lineRect.left + lineRect.width / 2) - wRect.left) / self.zoomLevel);
+            }
+        }
+
+        if (node && node.families && node.families.length > 1) {
+            return snap(self.getSpouseLeftX(layout, familyIndex) + self.CARD_W / 2);
+        }
+        return snap(self.getCoupleLineCenterX(layout, familyIndex));
+    }
+
+    // Build shared drawing context for sub-methods
+    var dc = { ctx: ctx, snap: snap, drawDot: drawDot, dpr: dpr, snapOffsetDev: snapOffsetDev, R: R, getFamilyAnchorX: getFamilyAnchorX };
+
+    var staggeredOffsets = this._drawPartnerConnectors(dc);
+    this._drawChildForks(dc, staggeredOffsets);
+};
+
+/**
+ * Draw horizontal partner/spouse connectors and vertical couple drops.
+ * Returns staggeredOffsets map: nodeId -> { familyIndex -> yOffset }.
+ */
+FamilyNavigator.prototype._drawPartnerConnectors = function (dc) {
+    var ctx = dc.ctx, snap = dc.snap, drawDot = dc.drawDot;
+    var staggeredOffsets = {};
+
     for (var nodeId in this.layoutMap) {
         var layout = this.layoutMap[nodeId];
         if (!layout || layout.x === undefined) continue;
-        
+
         var node = this.nodeMap[nodeId];
         if (!node || !node.families || node.families.length === 0) continue;
-        
+
         var wrapper = this.cardElements[nodeId];
         if (!wrapper) continue;
-        
+
         var wrapperRect = wrapper.getBoundingClientRect();
         var coupleLines = wrapper.querySelectorAll('.sp-couple-line');
         var allCards = wrapper.querySelectorAll('.sp-card');
-        
+
         // Get person card (first card)
         var personCard = allCards[0];
         if (!personCard) continue;
-        
+
         var personCardRect = personCard.getBoundingClientRect();
         // Person's right edge X coordinate
         var personRightX = snap(layout.x + (personCardRect.right - wrapperRect.left) / this.zoomLevel);
-        
+
         // Stagger divorce connectors vertically - each spouse at different Y level
         // Spread up to 5 spouses across wider vertical range for better visual separation
         var familyCount = coupleLines.length;
         var verticalSpacing = familyCount > 1 ? 16 : 0;  // pixels between each spouse connector (increased for better visibility)
         var centerY = this.getPersonCenterY(layout);
-        
+
         // Store offsets for this node's families
         staggeredOffsets[nodeId] = {};
-        
+
         // Draw connector for each family (person to each spouse)
         for (var fi = 0; fi < coupleLines.length; fi++) {
             // Stagger Y position: center ± offset based on family index
             var offset = (fi - (familyCount - 1) / 2) * verticalSpacing;
             var connectorY = snap(centerY + offset);
-            
+
             // Store offset for child fork drawing
             staggeredOffsets[nodeId][fi] = offset;
-            
+
             // Keep couple drops rendered on canvas for consistent connector color.
             var lineEl = coupleLines[fi];
             if (lineEl) {
                 lineEl.classList.add('sp-couple-line-staggered');
             }
-            
+
             // Spouse card is at allCards index (fi + 1)
             var spouseCard = allCards[fi + 1];
             if (!spouseCard) continue;
-            
+
             var spouseCardRect = spouseCard.getBoundingClientRect();
             // Spouse's left edge X coordinate
             var spouseLeftX = snap(layout.x + (spouseCardRect.left - wrapperRect.left) / this.zoomLevel);
-            
+
             // Endpoints exactly on card borders (dots are centered here).
             var lineStartX = personRightX;
             var lineEndX = spouseLeftX;
-            
+
             // Draw straight horizontal connector between person and spouse
             ctx.beginPath();
             ctx.moveTo(lineStartX, connectorY);
             ctx.lineTo(lineEndX, connectorY);
             ctx.stroke();
-            
+
             // Draw anchor dots centered on card borders (half-hidden by cards)
             drawDot(personRightX, connectorY);
             drawDot(spouseLeftX, connectorY);
-            
+
             // Draw vertical couple drop on canvas for all families.
             // Skip families marked with no children.
             if (lineEl && !lineEl.classList.contains('sp-couple-no-children')) {
                 var lineRect = lineEl.getBoundingClientRect();
                 var dropStartY = snap(connectorY - 1);
                 var dropEndY = snap(layout.y + ((lineRect.bottom - wrapperRect.top) / this.zoomLevel) + offset);
-                var dropX = snap(layout.x + ((lineRect.left + lineRect.width / 2) - wrapperRect.left) / this.zoomLevel);
+                var dropX = dc.getFamilyAnchorX(nodeId, layout, fi);
 
                 ctx.beginPath();
                 ctx.moveTo(dropX, dropStartY);
@@ -1851,6 +2082,94 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
                 ctx.stroke();
             }
         }
+    }
+
+    return staggeredOffsets;
+};
+
+/**
+ * Draw parent-to-child fork connectors using staggeredOffsets from partner connectors.
+ */
+FamilyNavigator.prototype._drawChildForks = function (dc, staggeredOffsets) {
+    var ctx = dc.ctx, snap = dc.snap, R = dc.R;
+    var self = this;
+
+    function coupleLineCenterX(nodeId, layout, fi) {
+        return dc.getFamilyAnchorX(nodeId, layout, fi);
+    }
+
+    function coupleLineBottomY(nodeId, layout, fi) {
+        var wrapper = self.cardElements[nodeId];
+        if (wrapper) {
+            var lines = wrapper.querySelectorAll('.sp-couple-line');
+            if (lines[fi]) {
+                var wRect = wrapper.getBoundingClientRect();
+                var lineRect = lines[fi].getBoundingClientRect();
+                return layout.y + ((lineRect.bottom - wRect.top) / self.zoomLevel);
+            }
+        }
+        return self.getPersonBottomY(layout);
+    }
+
+    function resolveSourceFamilyIndex(parentNode, edge) {
+        if (!edge || !parentNode || !parentNode.families || parentNode.families.length === 0) {
+            return null;
+        }
+        if (edge.familyIndex !== undefined && edge.familyIndex !== null) {
+            return edge.familyIndex;
+        }
+        if (edge.familyXref) {
+            for (var pfi = 0; pfi < parentNode.families.length; pfi++) {
+                if (parentNode.families[pfi] && parentNode.families[pfi].familyXref === edge.familyXref) {
+                    return pfi;
+                }
+            }
+        }
+        return null;
+    }
+
+    function targetXForChild(childId, edge) {
+        var cLayout = self.layoutMap[childId];
+        if (!cLayout || cLayout.x === undefined) return null;
+
+        var childNode = self.nodeMap[childId];
+        var tx = cLayout.centerX;
+        var ty = cLayout.y;
+
+        if (childNode && childNode.families && childNode.families.length > 0) {
+            var wrapper = self.cardElements[childId];
+            if (wrapper) {
+                var wRect = wrapper.getBoundingClientRect();
+                var cards = wrapper.querySelectorAll('.sp-card');
+
+                if (edge && edge.lineIndex !== undefined) {
+                    var explicitCardIndex = Math.max(0, edge.lineIndex);
+                    var targetCard = cards[explicitCardIndex] || cards[0];
+                    if (targetCard) {
+                        var cardRect = targetCard.getBoundingClientRect();
+                        tx = cLayout.x + ((cardRect.left + cardRect.width / 2) - wRect.left) / self.zoomLevel;
+                    }
+                } else {
+                    var oxref = childNode.originalChildXref;
+                    var targetCardIndex = 0;
+                    if (oxref && childNode.families) {
+                        for (var cfi = 0; cfi < childNode.families.length; cfi++) {
+                            var cSpouse = childNode.families[cfi].spouse;
+                            if (cSpouse && cSpouse.xref === oxref && cards[cfi + 1]) {
+                                targetCardIndex = cfi + 1;
+                                break;
+                            }
+                        }
+                    }
+                    var targetCard = cards[targetCardIndex] || cards[0];
+                    if (targetCard) {
+                        var cardRect = targetCard.getBoundingClientRect();
+                        tx = cLayout.x + ((cardRect.left + cardRect.width / 2) - wRect.left) / self.zoomLevel;
+                    }
+                }
+            }
+        }
+        return { x: tx, y: ty };
     }
 
     // Draw edges between parent and child nodes
@@ -1864,92 +2183,25 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
         var pNode = this.nodeMap[parentId];
         var srcY = pLayout.y + pLayout.h;
 
-        // Helper functions for connector source and target positions
-        function coupleLineCenterX(nodeId, layout, fi) {
-            var wrapper = self.cardElements[nodeId];
-            if (wrapper) {
-                var lines = wrapper.querySelectorAll('.sp-couple-line');
-                if (lines[fi]) {
-                    var wRect = wrapper.getBoundingClientRect();
-                    var lineRect = lines[fi].getBoundingClientRect();
-                    return layout.x + ((lineRect.left + lineRect.width / 2) - wRect.left) / self.zoomLevel;
-                }
-            }
-            return self.getCoupleLineCenterX(layout, fi);
-        }
-
-        function coupleLineBottomY(nodeId, layout, fi) {
-            var wrapper = self.cardElements[nodeId];
-            if (wrapper) {
-                var lines = wrapper.querySelectorAll('.sp-couple-line');
-                if (lines[fi]) {
-                    var wRect = wrapper.getBoundingClientRect();
-                    var lineRect = lines[fi].getBoundingClientRect();
-                    return layout.y + ((lineRect.bottom - wRect.top) / self.zoomLevel);
-                }
-            }
-            return self.getPersonBottomY(layout);
-        }
-
-        // Group children by familyIndex (undefined = ancestor or no-family edges)
+        // Group children by the actual source family on the parent node.
         var familyGroups = {};
         var defaultGroup = [];
-        
+
         for (var ci = 0; ci < children.length; ci++) {
             var childId = children[ci];
             var edgeKey = parentId + '->' + childId;
             var edge = this.edgeMap[edgeKey];
-            if (edge && edge.familyIndex !== undefined) {
-                var fi = edge.familyIndex;
-                if (!familyGroups[fi]) familyGroups[fi] = [];
-                familyGroups[fi].push({ childId: childId, edge: edge });
+            var sourceFamilyIndex = resolveSourceFamilyIndex(pNode, edge);
+            if (sourceFamilyIndex !== null) {
+                if (!familyGroups[sourceFamilyIndex]) {
+                    familyGroups[sourceFamilyIndex] = [];
+                }
+                familyGroups[sourceFamilyIndex].push({ childId: childId, edge: edge });
             } else {
                 defaultGroup.push({ childId: childId, edge: edge });
             }
         }
 
-        // CRITICAL: Collect all target Y values first to find global minimum
-        // This ensures siblings connect at same Y even if in different groups
-        function targetXForChild(childId, edge) {
-            var cLayout = self.layoutMap[childId];
-            if (!cLayout || cLayout.x === undefined) return null;
-            
-            var childNode = self.nodeMap[childId];
-            var tx = cLayout.centerX;  // Default: wrapper center
-            var ty = cLayout.y;        // Card top border (dot appears half-hidden behind card)
-            
-            // If child has families, target specific card (person or spouse)
-            if (childNode && childNode.families && childNode.families.length > 0) {
-                var wrapper = self.cardElements[childId];
-                if (wrapper) {
-                    var wRect = wrapper.getBoundingClientRect();
-                    var cards = wrapper.querySelectorAll('.sp-card');
-                    
-                    if (edge && edge.lineIndex !== undefined) {
-                        // Explicit line index: 0 = person card, 1 = first spouse card
-                        var targetCard = cards[edge.lineIndex === 1 ? 1 : 0];
-                        if (targetCard) {
-                            var cardRect = targetCard.getBoundingClientRect();
-                            tx = cLayout.x + ((cardRect.left + cardRect.width / 2) - wRect.left) / self.zoomLevel;
-                        }
-                    } else {
-                        // Implicit: check originalChildXref to determine target
-                        var oxref = childNode.originalChildXref;
-                        var cFirstSpouse = childNode.families[0].spouse;
-                        var targetCard = cards[0]; // Default to person card
-                        if (oxref && cFirstSpouse && cFirstSpouse.xref === oxref && cards[1]) {
-                            targetCard = cards[1]; // Use spouse card
-                        }
-                        if (targetCard) {
-                            var cardRect = targetCard.getBoundingClientRect();
-                            tx = cLayout.x + ((cardRect.left + cardRect.width / 2) - wRect.left) / self.zoomLevel;
-                        }
-                    }
-                }
-            }
-            return { x: tx, y: ty };
-        }
-        
         // Collect all targets and find minimum Y across ALL children
         var minGlobalY = Infinity;
         for (var ci = 0; ci < children.length; ci++) {
@@ -1971,12 +2223,12 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             var items = familyGroups[fi];
             var srcX = coupleLineCenterX(parentId, pLayout, fi);
             var famSrcY = coupleLineBottomY(parentId, pLayout, fi) + this.FORK_SOURCE_OFFSET;
-            
+
             // Add staggered offset from spouse connectors so forks originate from staggered positions
             if (staggeredOffsets[parentId] && staggeredOffsets[parentId][fi] !== undefined) {
                 famSrcY += staggeredOffsets[parentId][fi];
             }
-            
+
             var targets = [];
             for (var gi = 0; gi < items.length; gi++) {
                 var t = targetXForChild(items[gi].childId, items[gi].edge);
@@ -1990,10 +2242,9 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
                 var barRatio = 0.5;
                 if (familyGroupCount > 1 && fi !== primaryFamilyIndex) {
                     var offsetIdx = Math.max(0, fki - 1);
-                    // Move secondary families upward from the baseline branch.
                     barRatio = Math.max(0.16, 0.30 - offsetIdx * 0.08);
                 }
-                this.drawFork(ctx, srcX, famSrcY, targets, R, barRatio, dpr, snapOffsetDev);
+                this.drawFork(ctx, srcX, famSrcY, targets, R, barRatio, dc.dpr, dc.snapOffsetDev);
             }
         }
 
@@ -2004,7 +2255,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
             if (pNode && pNode.families && pNode.families.length > 0) {
                 defSrcX = coupleLineCenterX(parentId, pLayout, 0);
                 defSrcY = coupleLineBottomY(parentId, pLayout, 0) + this.FORK_SOURCE_OFFSET;
-                
+
                 // Add staggered offset from first spouse connector
                 if (staggeredOffsets[parentId] && staggeredOffsets[parentId][0] !== undefined) {
                     defSrcY += staggeredOffsets[parentId][0];
@@ -2022,7 +2273,7 @@ FamilyNavigator.prototype.drawConnectors = function (canvasW, canvasH) {
                 }
             }
             if (targets.length > 0) {
-                this.drawFork(ctx, defSrcX, defSrcY, targets, R, undefined, dpr, snapOffsetDev);
+                this.drawFork(ctx, defSrcX, defSrcY, targets, R, undefined, dc.dpr, dc.snapOffsetDev);
             }
         }
     }
@@ -2092,11 +2343,12 @@ FamilyNavigator.prototype.drawFork = function (ctx, srcX, srcY, targets, R, barY
 
     // Single child directly below — straight line
     if (targets.length === 1 && Math.abs(targets[0].x - srcX) < 2) {
+        var ty = snap(targets[0].y);
         ctx.beginPath();
         ctx.moveTo(srcX, srcY);
-        ctx.lineTo(srcX, targets[0].y - dotRadius);
+        ctx.lineTo(srcX, ty - dotRadius);
         ctx.stroke();
-        drawDot(srcX, targets[0].y);
+        drawDot(srcX, ty);
         return;
     }
 
@@ -2268,10 +2520,11 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
 
     this._dbg('expandAncestorInPlace', childNodeId, 'fam=' + familyXref, 'child=' + childXref, 'line=' + lineIndex);
 
-    // If ancestors for this line are already loaded (but hidden), just switch to them
+    // If ancestors for this exact line/family are already loaded (but hidden), just switch to them.
     var existingEdges = this.parentEdges[childNodeId] || [];
     for (var i = 0; i < existingEdges.length; i++) {
-        if (existingEdges[i].lineIndex === lineIndex) {
+        var existingEdge = existingEdges[i];
+        if (existingEdge.lineIndex === lineIndex && existingEdge.familyXref === familyXref) {
             this._dbg('expandAncestorInPlace → already loaded, switching line');
             this.activeLines[childNodeId] = lineIndex;
             this.measureAndRender();
@@ -2292,10 +2545,13 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
 
     this.showLoader(true);
 
+    var gen = this._treeGeneration;
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
+    xhr.timeout = 30000;
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
+            if (gen !== nav._treeGeneration) return; // tree replaced — discard
             nav.showLoader(false);
             if (xhr.status === 200 && xhr.responseText) {
                 try {
@@ -2303,13 +2559,25 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
                     if (newData.nodes && newData.nodes.length > 0) {
                         nav._dbg('expandAncestorInPlace → received', newData.nodes.length, 'nodes, rootId=' + newData.rootId);
                         nav._expansionHistory.push({ type: 'ancestor', fid: familyXref, pid: childXref, lineIndex: lineIndex });
-                        nav._mergeAncestorData(childNodeId, newData, lineIndex);
+                        nav._mergeAncestorData(childNodeId, newData, lineIndex, familyXref);
                     }
                 } catch (e) {
                     console.error('SP Tree Explorer: ancestor expand parse error', e);
                 }
+            } else if (xhr.status !== 0) {
+                console.error('SP Tree Explorer: ancestor expand HTTP', xhr.status);
             }
         }
+    };
+    xhr.ontimeout = function () {
+        if (gen !== nav._treeGeneration) return;
+        nav.showLoader(false);
+        nav._showToast(__('Request timed out \u2014 please try again.'));
+    };
+    xhr.onerror = function () {
+        if (gen !== nav._treeGeneration) return;
+        nav.showLoader(false);
+        nav._showToast(__('Connection error \u2014 please check your network.'));
     };
     xhr.send();
 };
@@ -2318,7 +2586,7 @@ FamilyNavigator.prototype.expandAncestorInPlace = function (childNodeId, familyX
  * Merge fetched ancestor data into the existing tree, connecting
  * the new subtree root to the given child node.
  */
-FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, lineIndex) {
+FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, lineIndex, familyXref) {
     this._dbg('_mergeAncestorData', childNodeId, 'rootId=' + newData.rootId, 'line=' + lineIndex,
         'nodes=' + newData.nodes.length, 'edges=' + (newData.edges ? newData.edges.length : 0),
         'parentEdgesBefore=' + (this.parentEdges[childNodeId] ? this.parentEdges[childNodeId].length : 0));
@@ -2343,7 +2611,8 @@ FamilyNavigator.prototype._mergeAncestorData = function (childNodeId, newData, l
             to: childNodeId,
             type: 'parent-child',
             line: lineIndex === 0 ? 'self' : 'spouse',
-            lineIndex: lineIndex
+            lineIndex: lineIndex,
+            familyXref: familyXref || ''
         };
         var connectKey = newData.rootId + '->' + childNodeId;
         this.edgeMap[connectKey] = connectEdge;
@@ -2407,17 +2676,19 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
 
     this.showLoader(true);
 
+    var gen = ++this._treeGeneration; // bump early so prior in-flight callbacks are discarded
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
+    xhr.timeout = 30000;
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
+            if (gen !== nav._treeGeneration) return; // superseded by a newer navigateTo
             nav.showLoader(false);
             if (xhr.status === 200 && xhr.responseText) {
                 try {
                     var newData = JSON.parse(xhr.responseText);
                     if (newData.nodes && newData.nodes.length > 0) {
-                        // Replace the entire tree
-                        nav._dbg('navigateTo → received', newData.nodes.length, 'nodes, rootId=' + newData.rootId);
+                        nav._dbg('navigateTo → received', newData.nodes.length, 'nodes, rootId=' + newData.rootId, 'gen=' + nav._treeGeneration);
                         nav.treeData = newData;
                         nav.activeLines = {};
                         nav._expansionHistory = [];
@@ -2438,8 +2709,20 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
                 } catch (e) {
                     console.error('SP Tree Explorer: navigate parse error', e);
                 }
+            } else if (xhr.status !== 0) {
+                console.error('SP Tree Explorer: navigateTo HTTP', xhr.status);
             }
         }
+    };
+    xhr.ontimeout = function () {
+        if (gen !== nav._treeGeneration) return;
+        nav.showLoader(false);
+        nav._showToast(__('Request timed out \u2014 please try again.'));
+    };
+    xhr.onerror = function () {
+        if (gen !== nav._treeGeneration) return;
+        nav.showLoader(false);
+        nav._showToast(__('Connection error \u2014 please check your network.'));
     };
     xhr.send();
 };
@@ -2470,10 +2753,23 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
 
     this.showLoader(true);
 
+    var gen = this._treeGeneration;
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
+    xhr.timeout = 30000;
+    xhr.ontimeout = function () {
+        if (gen !== nav._treeGeneration) return;
+        nav.showLoader(false);
+        nav._showToast(__('Request timed out \u2014 please try again.'));
+    };
+    xhr.onerror = function () {
+        if (gen !== nav._treeGeneration) return;
+        nav.showLoader(false);
+        nav._showToast(__('Connection error \u2014 please check your network.'));
+    };
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
+            if (gen !== nav._treeGeneration) return; // tree replaced — discard
             nav.showLoader(false);
             if (xhr.status === 200 && xhr.responseText) {
                 try {
@@ -2491,10 +2787,9 @@ FamilyNavigator.prototype.expandLazyNode = function (lazyNodeId) {
                     delete nav.nodeMap[lazyNodeId];
                     nav.measureAndRender();
                 }
-            } else {
-                // HTTP error — remove the lazy node
-                delete nav.nodeMap[lazyNodeId];
-                nav.measureAndRender();
+            } else if (xhr.status !== 0) {
+                // HTTP error — keep node so user can retry
+                nav._showToast(__('Server error \u2014 please try again.'));
             }
         }
     };
@@ -2638,7 +2933,7 @@ FamilyNavigator.prototype.initPanZoom = function () {
         nav.container.style.cursor = 'grabbing';
     });
 
-    document.addEventListener('mousemove', function (e) {
+    this._onMouseMove = function (e) {
         if (!isDown) return;
         var dx = e.clientX - startX;
         var dy = e.clientY - startY;
@@ -2648,14 +2943,16 @@ FamilyNavigator.prototype.initPanZoom = function () {
         nav.panX = startPanX + dx;
         nav.panY = startPanY + dy;
         nav.applyTransform();
-    });
+    };
+    document.addEventListener('mousemove', this._onMouseMove);
 
-    document.addEventListener('mouseup', function (e) {
+    this._onMouseUp = function (e) {
         if (dragging) e.preventDefault();
         isDown = false;
         dragging = false;
         if (nav.container) nav.container.style.cursor = '';
-    });
+    };
+    document.addEventListener('mouseup', this._onMouseUp);
 
     // Touch support
     this.container.addEventListener('touchstart', function (e) {
@@ -2669,7 +2966,7 @@ FamilyNavigator.prototype.initPanZoom = function () {
         startPanY = nav.panY;
     }, { passive: true });
 
-    document.addEventListener('touchmove', function (e) {
+    this._onTouchMove = function (e) {
         if (!isDown || e.touches.length !== 1) return;
         var dx = e.touches[0].clientX - startX;
         var dy = e.touches[0].clientY - startY;
@@ -2678,12 +2975,14 @@ FamilyNavigator.prototype.initPanZoom = function () {
         nav.panX = startPanX + dx;
         nav.panY = startPanY + dy;
         nav.applyTransform();
-    }, { passive: true });
+    };
+    document.addEventListener('touchmove', this._onTouchMove, { passive: true });
 
-    document.addEventListener('touchend', function () {
+    this._onTouchEnd = function () {
         isDown = false;
         dragging = false;
-    });
+    };
+    document.addEventListener('touchend', this._onTouchEnd);
 
     // Wheel zoom
     this.container.addEventListener('wheel', function (e) {
@@ -2779,6 +3078,13 @@ FamilyNavigator.prototype.initToolbar = function () {
         });
     }
 
+    var btnOpenPage = document.getElementById(prefix + '_btnOpenPage');
+    if (btnOpenPage) {
+        btnOpenPage.addEventListener('click', function () {
+            nav.openFullPage();
+        });
+    }
+
     var btnHome = document.getElementById(prefix + '_btnHome');
     if (btnHome) {
         btnHome.addEventListener('click', function () {
@@ -2792,7 +3098,7 @@ FamilyNavigator.prototype.initToolbar = function () {
         zoomOut:    btnZoomOut,
         zoomReset:  btnZoomReset,
         fullscreen: btnFullscreen,
-        share:      btnShare
+        share:      btnShare || btnOpenPage
     };
 
     // Sources toggle
@@ -2849,20 +3155,22 @@ FamilyNavigator.prototype.initToolbar = function () {
     }
 
     // Close search panel on Escape
-    document.addEventListener('keydown', function (e) {
+    this._onEscape = function (e) {
         if (e.key === 'Escape' && nav.searchPanel && nav.searchPanel.classList.contains('sp-search-panel-open')) {
             nav.closeSearchPanel();
         }
-    });
+    };
+    document.addEventListener('keydown', this._onEscape);
 
     // Close search panel on click outside
-    document.addEventListener('mousedown', function (e) {
+    this._onClickOutside = function (e) {
         if (nav.searchPanel && nav.searchPanel.classList.contains('sp-search-panel-open')) {
             if (!nav.searchPanel.contains(e.target) && (!nav.focusChip || !nav.focusChip.contains(e.target))) {
                 nav.closeSearchPanel();
             }
         }
-    });
+    };
+    document.addEventListener('mousedown', this._onClickOutside);
 
     // Focus person chip — initial render
     nav._updateFocusPersonBox();
@@ -2874,7 +3182,7 @@ FamilyNavigator.prototype.initToolbar = function () {
 
 FamilyNavigator.prototype.initSearch = function () {
     var nav = this;
-    var searchTimeout = null;
+    this._searchTimeout = null;
 
     if (!this.searchInput || !this.searchResults) return;
 
@@ -2883,7 +3191,7 @@ FamilyNavigator.prototype.initSearch = function () {
         var query = nav.searchInput.value.trim();
         nav.selectedXref = '';
 
-        if (searchTimeout) clearTimeout(searchTimeout);
+        if (nav._searchTimeout) clearTimeout(nav._searchTimeout);
 
         if (query.length < 2) {
             nav.searchResults.innerHTML = '';
@@ -2891,7 +3199,7 @@ FamilyNavigator.prototype.initSearch = function () {
             return;
         }
 
-        searchTimeout = setTimeout(function () {
+        nav._searchTimeout = setTimeout(function () {
             nav.fetchSearchResults(query);
         }, 300);
     });
@@ -2913,22 +3221,33 @@ FamilyNavigator.prototype.initSearch = function () {
 
 FamilyNavigator.prototype.fetchSearchResults = function (query) {
     var nav = this;
-    var url = this.searchUrl 
+    var url = this.searchUrl
         + '&instance=' + encodeURIComponent(this.cardPrefix)
         + '&q=' + encodeURIComponent(query);
 
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
+    xhr.timeout = 15000;
+    xhr.ontimeout = function () {
+        nav._showToast(__('Search timed out \u2014 please try again.'), { type: 'warn' });
+    };
+    xhr.onerror = function () {
+        nav._showToast(__('Connection error \u2014 search failed.'), { type: 'warn' });
+    };
     xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-            try {
-                var results = nav._normalizeSearchResults(xhr.responseText);
-                nav.latestSearchResults = results;
-                nav.renderSearchResults(results);
-            } catch (e) {
-                console.error('SP Tree Explorer: search parse error', e);
-                nav.latestSearchResults = [];
-                nav.renderSearchResults([]);
+        if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+                try {
+                    var results = nav._normalizeSearchResults(xhr.responseText);
+                    nav.latestSearchResults = results;
+                    nav.renderSearchResults(results);
+                } catch (e) {
+                    console.error('SP Tree Explorer: search parse error', e);
+                    nav.latestSearchResults = [];
+                    nav.renderSearchResults([]);
+                }
+            } else if (xhr.status !== 0) {
+                nav._showToast(__('Search failed \u2014 please try again.'), { type: 'warn' });
             }
         }
     };
@@ -2974,6 +3293,19 @@ FamilyNavigator.prototype.renderSearchResults = function (results) {
     }
 
     var nav = this;
+
+    // Event delegation — single listener instead of per-item closures
+    if (!this._searchResultsDelegated) {
+        this._searchResultsDelegated = true;
+        this._searchResultsListener = function (e) {
+            var item = e.target.closest('.sp-search-item[data-xref]');
+            if (item && item.dataset.xref) {
+                nav._navigateFromSearch(item.dataset.xref);
+            }
+        };
+        this.searchResults.addEventListener('click', this._searchResultsListener);
+    }
+
     for (var i = 0; i < results.length; i++) {
         var item = results[i];
 
@@ -2984,9 +3316,11 @@ FamilyNavigator.prototype.renderSearchResults = function (results) {
 
         if (item.thumb) {
             var thumb = document.createElement('img');
-            thumb.className = 'sp-search-item-thumb';
-            thumb.src = item.thumb;
+            thumb.className = 'sp-search-item-thumb sp-img-loading';
             thumb.alt = '';
+            thumb.onload = function () { this.classList.remove('sp-img-loading'); };
+            thumb.onerror = function () { this.classList.remove('sp-img-loading'); };
+            thumb.src = item.thumb;
             el.appendChild(thumb);
         }
 
@@ -3006,13 +3340,6 @@ FamilyNavigator.prototype.renderSearchResults = function (results) {
         }
 
         el.appendChild(info);
-
-        (function(xref) {
-            el.addEventListener('click', function () {
-                nav._navigateFromSearch(xref);
-            });
-        })(item.xref);
-
         this.searchResults.appendChild(el);
     }
 
@@ -3028,31 +3355,42 @@ FamilyNavigator.prototype._setCurrentXref = function (targetXref) {
     var rootNode = this.nodeMap[this.treeData.rootId];
     if (!rootNode || !rootNode.person) return;
 
+    var desiredXref = targetXref || this.baseXref || rootNode.person.xref;
+
     // Default: root person's own xref
     this.currentRootXref = rootNode.person.xref;
+    if (this.treeData && this.treeData.rootId) {
+        this.activeLines[this.treeData.rootId] = 0;
+    }
 
-    // Check if the target ended up as spouse (gender swap)
-    if (targetXref && targetXref !== rootNode.person.xref && rootNode.families) {
+    // Check if the requested person ended up as spouse (gender swap)
+    if (desiredXref && desiredXref !== rootNode.person.xref && rootNode.families) {
         for (var fi = 0; fi < rootNode.families.length; fi++) {
-            if (rootNode.families[fi].spouse && rootNode.families[fi].spouse.xref === targetXref) {
-                this.currentRootXref = targetXref;
-                this.activeLines[this.treeData.rootId] = 1;
-                break;
+            if (rootNode.families[fi].spouse && rootNode.families[fi].spouse.xref === desiredXref) {
+                this.currentRootXref = desiredXref;
+                this.activeLines[this.treeData.rootId] = fi + 1;
+                this._updateOriginHighlight();
+                return;
             }
         }
     }
+
+    this.currentRootXref = desiredXref || rootNode.person.xref;
+    this._updateOriginHighlight();
 };
 
 /**
- * Build a shareable URL for the current tree view and copy it to clipboard.
+ * Build a URL for the current tree state.
  * Captures toggle states, zoom, viewport center, and expansion history.
  */
-FamilyNavigator.prototype.copyShareLink = function (btnEl) {
-    var url = new URL(window.location.href);
+FamilyNavigator.prototype._buildStateUrl = function (baseUrl) {
+    var url = new URL(baseUrl || window.location.href, window.location.href);
+
     if (this.currentRootXref) {
         url.searchParams.set('xref', this.currentRootXref);
     }
-    // Toggle states — always explicit so recipient sees sender's exact view
+
+    // Toggle states — always explicit so recipient sees the exact same view.
     url.searchParams.set('sources', this.showSources ? '1' : '0');
     url.searchParams.set('details', this.showDetails ? '1' : '0');
     url.searchParams.set('advanced', this.showAdvancedControls ? '1' : '0');
@@ -3091,7 +3429,27 @@ FamilyNavigator.prototype.copyShareLink = function (btnEl) {
         url.searchParams.delete('anc');
     }
 
-    var shareUrl = url.toString();
+    return url;
+};
+
+/**
+ * Open the current tree in the standalone full-page chart view.
+ */
+FamilyNavigator.prototype.openFullPage = function () {
+    if (!this.fullPageUrl) return;
+
+    var targetUrl = this._buildStateUrl(this.fullPageUrl).toString();
+    var opened = window.open(targetUrl, '_blank', 'noopener');
+    if (!opened) {
+        window.location.href = targetUrl;
+    }
+};
+
+/**
+ * Build a shareable URL for the current tree view and copy it to clipboard.
+ */
+FamilyNavigator.prototype.copyShareLink = function (btnEl) {
+    var shareUrl = this._buildStateUrl(window.location.href).toString();
 
     navigator.clipboard.writeText(shareUrl).then(function () {
         // Brief visual feedback — swap icon to checkmark
@@ -3100,17 +3458,21 @@ FamilyNavigator.prototype.copyShareLink = function (btnEl) {
         setTimeout(function () { btnEl.innerHTML = original; }, 1500);
     }).catch(function () {
         // Fallback for older browsers / non-HTTPS
-        var ta = document.createElement('textarea');
-        ta.value = shareUrl;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        var original = btnEl.innerHTML;
-        btnEl.innerHTML = '&#x2705;';
-        setTimeout(function () { btnEl.innerHTML = original; }, 1500);
+        try {
+            var ta = document.createElement('textarea');
+            ta.value = shareUrl;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            var original = btnEl.innerHTML;
+            btnEl.innerHTML = '&#x2705;';
+            setTimeout(function () { btnEl.innerHTML = original; }, 1500);
+        } catch (e) {
+            console.warn('SP Tree Explorer: clipboard copy failed', e);
+        }
     });
 };
 
@@ -3119,24 +3481,84 @@ FamilyNavigator.prototype.copyShareLink = function (btnEl) {
 // ==========================================================================
 
 FamilyNavigator.prototype.focusOrigin = function () {
-    this.focusNode(this.treeData.rootId);
+    this.focusNode(this.treeData.rootId, this.currentRootXref || null);
+};
+
+FamilyNavigator.prototype._getNodeFocusPoint = function (nodeId, targetXref) {
+    var layout = this.layoutMap[nodeId];
+    if (!layout) return null;
+
+    var fallback = {
+        x: layout.centerX,
+        y: layout.y + layout.h / 2
+    };
+
+    if (!targetXref) {
+        return fallback;
+    }
+
+    var node = this.nodeMap[nodeId];
+    var wrapper = this.cardElements[nodeId];
+    if (!node || !wrapper) {
+        return fallback;
+    }
+
+    var cards = wrapper.querySelectorAll('.sp-card');
+    if (!cards || cards.length === 0) {
+        return fallback;
+    }
+
+    var cardIndex = -1;
+    if (node.person && node.person.xref === targetXref) {
+        cardIndex = 0;
+    } else if (node.families) {
+        for (var fi = 0; fi < node.families.length; fi++) {
+            if (node.families[fi].spouse && node.families[fi].spouse.xref === targetXref) {
+                cardIndex = fi + 1;
+                break;
+            }
+        }
+    }
+
+    if (cardIndex < 0 || !cards[cardIndex]) {
+        return fallback;
+    }
+
+    var wRect = wrapper.getBoundingClientRect();
+    var cRect = cards[cardIndex].getBoundingClientRect();
+
+    return {
+        x: layout.x + ((cRect.left + cRect.width / 2) - wRect.left) / this.zoomLevel,
+        y: layout.y + ((cRect.top + cRect.height / 2) - wRect.top) / this.zoomLevel
+    };
 };
 
 /**
  * Center the viewport on a specific node.
+ * In profile view the node is placed near the top so descendants are
+ * visible without scrolling (ancestors require panning up).
  */
-FamilyNavigator.prototype.focusNode = function (nodeId) {
+FamilyNavigator.prototype.focusNode = function (nodeId, focusXref) {
     if (!this.container) return;
-    var layout = this.layoutMap[nodeId];
-    if (!layout) return;
+
+    var point = this._getNodeFocusPoint(nodeId, focusXref);
+    if (!point) return;
 
     var wrapRect = this.container.getBoundingClientRect();
+    if (wrapRect.width === 0 || wrapRect.height === 0) return;
 
-    var targetX = layout.centerX * this.zoomLevel;
-    var targetY = (layout.y + layout.h / 2) * this.zoomLevel;
+    var targetX = point.x * this.zoomLevel;
+    var targetY = point.y * this.zoomLevel;
 
     this.panX = wrapRect.width / 2 - targetX;
-    this.panY = wrapRect.height / 2 - targetY;
+
+    if (this.profileView) {
+        // Place the focused card near the top, below the toolbar controls
+        var topMargin = 80;
+        this.panY = topMargin - targetY + (this.CARD_H / 2) * this.zoomLevel;
+    } else {
+        this.panY = wrapRect.height / 2 - targetY;
+    }
     this.applyTransform();
 };
 
@@ -3165,6 +3587,119 @@ FamilyNavigator.prototype.hideOverlay = function () {
     if (this.overlay) {
         this.overlay.classList.remove('sp-overlay-active');
     }
+};
+
+// ==========================================================================
+// TOAST NOTIFICATIONS
+// ==========================================================================
+
+/**
+ * Show a transient toast message inside the navigator container.
+ * @param {string} message  - text to display
+ * @param {object} [opts]   - { type: 'error'|'warn'|'info', duration: ms (0=sticky), action: {label,fn} }
+ */
+FamilyNavigator.prototype._showToast = function (message, opts) {
+    opts = opts || {};
+    var type = opts.type || 'error';
+    var duration = opts.duration !== undefined ? opts.duration : 5000;
+
+    var wrap = this.container;
+    if (!wrap) return;
+
+    // Remove existing toast of the same type to avoid stacking
+    var existing = wrap.querySelector('.sp-toast[data-type="' + type + '"]');
+    if (existing) existing.parentNode.removeChild(existing);
+
+    var toast = document.createElement('div');
+    toast.className = 'sp-toast sp-toast-' + type;
+    toast.setAttribute('data-type', type);
+    toast.setAttribute('role', 'alert');
+
+    var iconSvg = type === 'error'
+        ? '<svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'
+        : '<svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+
+    var iconSpan = document.createElement('span');
+    iconSpan.className = 'sp-toast-icon';
+    iconSpan.innerHTML = iconSvg; // static SVG — safe
+    toast.appendChild(iconSpan);
+
+    var msgSpan = document.createElement('span');
+    msgSpan.className = 'sp-toast-msg';
+    msgSpan.textContent = message;
+    toast.appendChild(msgSpan);
+
+    if (opts.action) {
+        var actionBtn = document.createElement('button');
+        actionBtn.type = 'button';
+        actionBtn.className = 'sp-toast-action';
+        actionBtn.textContent = opts.action.label;
+        if (opts.action.fn) {
+            actionBtn.addEventListener('click', function () {
+                opts.action.fn();
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            });
+        }
+        toast.appendChild(actionBtn);
+    }
+
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'sp-toast-close';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.innerHTML = '&times;';
+    closeBtn.addEventListener('click', function () {
+        toast.classList.add('sp-toast-exit');
+        setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 200);
+    });
+    toast.appendChild(closeBtn);
+
+    wrap.appendChild(toast);
+
+    // Trigger enter animation
+    requestAnimationFrame(function () { toast.classList.add('sp-toast-visible'); });
+
+    if (duration > 0) {
+        setTimeout(function () {
+            toast.classList.add('sp-toast-exit');
+            setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 200);
+        }, duration);
+    }
+};
+
+/**
+ * Dismiss all toasts of a given type, or all toasts if no type specified.
+ */
+FamilyNavigator.prototype._dismissToast = function (type) {
+    if (!this.container) return;
+    var selector = type ? '.sp-toast[data-type="' + type + '"]' : '.sp-toast';
+    var toasts = this.container.querySelectorAll(selector);
+    for (var i = 0; i < toasts.length; i++) {
+        if (toasts[i].parentNode) toasts[i].parentNode.removeChild(toasts[i]);
+    }
+};
+
+// ==========================================================================
+// OFFLINE DETECTION
+// ==========================================================================
+
+/**
+ * Listen for online/offline events and show a sticky toast when connection is lost.
+ */
+FamilyNavigator.prototype._initConnectivityWatch = function () {
+    var nav = this;
+    this._onOffline = function () {
+        nav._showToast(__('Connection lost \u2014 please reload the page.'), {
+            type: 'error',
+            duration: 0,
+            action: { label: __('Reload'), fn: function () { window.location.reload(); } }
+        });
+    };
+    this._onOnline = function () {
+        nav._dismissToast('error');
+    };
+    window.addEventListener('offline', this._onOffline);
+    window.addEventListener('online', this._onOnline);
 };
 
 // ==========================================================================
@@ -3202,8 +3737,11 @@ FamilyNavigator.prototype._updateFocusPersonBox = function () {
     if (displayPerson.thumb) {
         var img = document.createElement('img');
         img.className = 'sp-focus-chip-img';
-        img.src = displayPerson.thumb;
         img.alt = displayPerson.name || '';
+        img.onload = function () { img.style.opacity = '1'; };
+        img.style.opacity = '0';
+        img.style.transition = 'opacity 0.2s';
+        img.src = displayPerson.thumb;
         this.focusAvatar.appendChild(img);
     } else {
         this.focusAvatar.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 1a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-4 0-7 1.8-7 3v1h14v-1c0-1.2-3-3-7-3z" fill="currentColor"/></svg>';
@@ -3404,6 +3942,15 @@ FamilyNavigator.prototype._replayLazyExpand = function (fid, pid, dir, callback)
 
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
+    xhr.timeout = 30000;
+    xhr.ontimeout = function () {
+        nav._showToast(__('Request timed out \u2014 some branches may not have loaded.'));
+        callback();
+    };
+    xhr.onerror = function () {
+        nav._showToast(__('Connection error \u2014 some branches may not have loaded.'));
+        callback();
+    };
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
             if (xhr.status === 200 && xhr.responseText) {
@@ -3447,7 +3994,8 @@ FamilyNavigator.prototype._replayAncestorExpand = function (fid, pid, lineIndex,
     // Check if already expanded for this line
     var existingEdges = this.parentEdges[childNodeId] || [];
     for (var i = 0; i < existingEdges.length; i++) {
-        if (existingEdges[i].lineIndex === lineIndex) {
+        var existingEdge = existingEdges[i];
+        if (existingEdge.lineIndex === lineIndex && existingEdge.familyXref === fid) {
             this.activeLines[childNodeId] = lineIndex;
             this.measureAndRender();
             callback();
@@ -3467,6 +4015,15 @@ FamilyNavigator.prototype._replayAncestorExpand = function (fid, pid, lineIndex,
 
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
+    xhr.timeout = 30000;
+    xhr.ontimeout = function () {
+        nav._showToast(__('Request timed out \u2014 some branches may not have loaded.'));
+        callback();
+    };
+    xhr.onerror = function () {
+        nav._showToast(__('Connection error \u2014 some branches may not have loaded.'));
+        callback();
+    };
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
             if (xhr.status === 200 && xhr.responseText) {
@@ -3474,7 +4031,7 @@ FamilyNavigator.prototype._replayAncestorExpand = function (fid, pid, lineIndex,
                     var newData = JSON.parse(xhr.responseText);
                     if (newData.nodes && newData.nodes.length > 0) {
                         nav._expansionHistory.push({ type: 'ancestor', fid: fid, pid: pid, lineIndex: lineIndex });
-                        nav._mergeAncestorData(childNodeId, newData, lineIndex);
+                        nav._mergeAncestorData(childNodeId, newData, lineIndex, fid);
                     }
                 } catch (e) {
                     console.error('SP Tree Explorer: replay ancestor parse error', e);
@@ -3497,10 +4054,54 @@ FamilyNavigator.prototype.toggleFullscreen = function () {
     var chartParent = wrap.closest('.wt-chart-interactive');
     if (chartParent) {
         chartParent.classList.toggle('sp-fullview');
+        // Toggle body class as fallback for browsers without :has() support
+        document.body.classList.toggle('sp-fullview-active', chartParent.classList.contains('sp-fullview'));
     }
     setTimeout(function () {
         // Re-sync overlay and re-center after the resize
         nav._syncIconOverlayBounds();
     }, 100);
+};
+
+/**
+ * Clean up all observers, document-level listeners, and detached DOM nodes.
+ * Call before re-creating a FamilyNavigator on the same container.
+ */
+FamilyNavigator.prototype.destroy = function () {
+    // ResizeObserver
+    if (this._containerObserver) {
+        this._containerObserver.disconnect();
+        this._containerObserver = null;
+    }
+    // Document-level pan/zoom handlers
+    if (this._onMouseMove)   document.removeEventListener('mousemove', this._onMouseMove);
+    if (this._onMouseUp)     document.removeEventListener('mouseup', this._onMouseUp);
+    if (this._onTouchMove)   document.removeEventListener('touchmove', this._onTouchMove);
+    if (this._onTouchEnd)    document.removeEventListener('touchend', this._onTouchEnd);
+    // Toolbar document handlers
+    if (this._onEscape)      document.removeEventListener('keydown', this._onEscape);
+    if (this._onClickOutside) document.removeEventListener('mousedown', this._onClickOutside);
+    // Re-parent search panel back (or remove)
+    if (this.searchPanel && this.searchPanel.parentNode === document.body) {
+        this.searchPanel.parentNode.removeChild(this.searchPanel);
+    }
+    // Search debounce cleanup
+    if (this._searchTimeout) {
+        clearTimeout(this._searchTimeout);
+        this._searchTimeout = null;
+    }
+    // Connectivity listeners
+    if (this._onOffline) window.removeEventListener('offline', this._onOffline);
+    if (this._onOnline) window.removeEventListener('online', this._onOnline);
+    // Search results delegation listener
+    if (this.searchResults && this._searchResultsListener) {
+        this.searchResults.removeEventListener('click', this._searchResultsListener);
+    }
+    // Toasts
+    this._dismissToast();
+    // Icon overlay cleanup
+    if (this.iconOverlay && this.iconOverlay.parentNode) {
+        this.iconOverlay.parentNode.removeChild(this.iconOverlay);
+    }
 };
 
