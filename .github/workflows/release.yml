@@ -1,0 +1,35 @@
+name: Create Release
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: echo "version=$(cat latest-version.txt | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Build release ZIP
+        run: |
+          # git archive respects .gitattributes export-ignore
+          git archive --format=zip --prefix=sp_tree_explorer/ -o sp_tree_explorer-${{ steps.version.outputs.version }}.zip HEAD
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          body: ${{ github.event.pull_request.body }}
+          files: sp_tree_explorer-${{ steps.version.outputs.version }}.zip
+          generate_release_notes: false
