@@ -66,7 +66,6 @@ return [
     'Show details by default' => 'Toon details standaard',
     'Show father\'s ancestors' => 'Toon voorouders van vader',
     'Show mother\'s / spouse\'s ancestors' => 'Toon voorouders van moeder / partner',
-    'Show parents' => 'Toon ouders',
     'Show source counts' => 'Toon aantal bronnen',
     'Show source, note, and media count badges on person cards and marriage chips by default.' => 'Toon standaard badges met aantal bronnen, notities en media op persoonskaarten en huwelijksverbindingen.',
     'Show sources by default (profile tab)' => 'Bronnen standaard tonen (profieltabblad)',

@@ -66,7 +66,6 @@ return [
     'Show details by default' => 'Ve výchozím nastavení zobrazovat podrobnosti',
     'Show father\'s ancestors' => 'Zobrazit předky otce',
     'Show mother\'s / spouse\'s ancestors' => 'Zobrazit předky matky / manžela či manželky',
-    'Show parents' => 'Zobrazit rodiče',
     'Show source counts' => 'Zobrazit počty zdrojů',
     'Show source, note, and media count badges on person cards and marriage chips by default.' => 'Ve výchozím nastavení zobrazovat na kartách osob a značkách sňatků odznaky s počtem zdrojů, poznámek a médií.',
     'Show sources by default (profile tab)' => 'Ve výchozím nastavení zobrazit zdroje (karta profilu)',

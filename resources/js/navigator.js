@@ -2676,18 +2676,18 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
 
     this.showLoader(true);
 
+    var gen = ++this._treeGeneration; // bump early so prior in-flight callbacks are discarded
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
     xhr.timeout = 30000;
     xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
+            if (gen !== nav._treeGeneration) return; // superseded by a newer navigateTo
             nav.showLoader(false);
             if (xhr.status === 200 && xhr.responseText) {
                 try {
                     var newData = JSON.parse(xhr.responseText);
                     if (newData.nodes && newData.nodes.length > 0) {
-                        // Replace the entire tree — bump generation to discard in-flight callbacks
-                        nav._treeGeneration++;
                         nav._dbg('navigateTo → received', newData.nodes.length, 'nodes, rootId=' + newData.rootId, 'gen=' + nav._treeGeneration);
                         nav.treeData = newData;
                         nav.activeLines = {};
@@ -2715,10 +2715,12 @@ FamilyNavigator.prototype.navigateTo = function (xref) {
         }
     };
     xhr.ontimeout = function () {
+        if (gen !== nav._treeGeneration) return;
         nav.showLoader(false);
         nav._showToast(__('Request timed out \u2014 please try again.'));
     };
     xhr.onerror = function () {
+        if (gen !== nav._treeGeneration) return;
         nav.showLoader(false);
         nav._showToast(__('Connection error \u2014 please check your network.'));
     };

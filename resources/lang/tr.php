@@ -66,7 +66,6 @@ return [
     'Show details by default' => 'Ayrıntıları varsayılan olarak göster',
     'Show father\'s ancestors' => 'Babanın atalarını göster',
     'Show mother\'s / spouse\'s ancestors' => 'Annenin / eşin atalarını göster',
-    'Show parents' => 'Ebeveynleri göster',
     'Show source counts' => 'Kaynak sayılarını göster',
     'Show source, note, and media count badges on person cards and marriage chips by default.' => 'Kişi kartlarında ve evlilik işaretlerinde kaynak, not ve medya sayısı rozetlerini varsayılan olarak göster.',
     'Show sources by default (profile tab)' => 'Kaynakları varsayılan olarak göster (profil sekmesi)',

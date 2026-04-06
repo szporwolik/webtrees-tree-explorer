@@ -66,7 +66,6 @@ return [
     'Show details by default' => 'Mostrar detalhes por predefinição',
     'Show father\'s ancestors' => 'Mostrar os antepassados do pai',
     'Show mother\'s / spouse\'s ancestors' => 'Mostrar os antepassados da mãe / do cônjuge',
-    'Show parents' => 'Mostrar pais',
     'Show source counts' => 'Mostrar contagem de fontes',
     'Show source, note, and media count badges on person cards and marriage chips by default.' => 'Mostrar por predefinição os emblemas de contagem de fontes, notas e multimédia nos cartões das pessoas e nos marcadores de casamento.',
     'Show sources by default (profile tab)' => 'Mostrar fontes por predefinição (separador de perfil)',

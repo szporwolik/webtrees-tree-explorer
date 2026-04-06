@@ -66,7 +66,6 @@ return [
     'Show details by default' => 'Visa detaljer som standard',
     'Show father\'s ancestors' => 'Visa faderns förfäder',
     'Show mother\'s / spouse\'s ancestors' => 'Visa moderns / makens / makans förfäder',
-    'Show parents' => 'Visa föräldrar',
     'Show source counts' => 'Visa antal källor',
     'Show source, note, and media count badges on person cards and marriage chips by default.' => 'Visa märken för antal källor, anteckningar och media på personkort och vigselmarkörer som standard.',
     'Show sources by default (profile tab)' => 'Visa källor som standard (profilflik)',

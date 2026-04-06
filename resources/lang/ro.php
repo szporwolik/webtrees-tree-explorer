@@ -66,7 +66,6 @@ return [
     'Show details by default' => 'Afișează implicit detaliile',
     'Show father\'s ancestors' => 'Afișează strămoșii tatălui',
     'Show mother\'s / spouse\'s ancestors' => 'Afișează strămoșii mamei / soțului sau soției',
-    'Show parents' => 'Afișează părinții',
     'Show source counts' => 'Afișează numărul surselor',
     'Show source, note, and media count badges on person cards and marriage chips by default.' => 'Afișează implicit insignele cu numărul surselor, notelor și fișierelor media pe cardurile persoanelor și pe etichetele căsătoriei.',
     'Show sources by default (profile tab)' => 'Arată sursele implicit (filă de profil)',

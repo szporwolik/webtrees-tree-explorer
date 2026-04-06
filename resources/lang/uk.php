@@ -66,7 +66,6 @@ return [
     'Show details by default' => 'Типово показувати деталі',
     'Show father\'s ancestors' => 'Показати предків батька',
     'Show mother\'s / spouse\'s ancestors' => 'Показати предків матері / подружжя',
-    'Show parents' => 'Показати батьків',
     'Show source counts' => 'Показати кількість джерел',
     'Show source, note, and media count badges on person cards and marriage chips by default.' => 'Типово показувати значки з кількістю джерел, приміток і медіа на картках осіб і шлюбних позначках.',
     'Show sources by default (profile tab)' => 'Показувати джерела за замовчуванням (вкладка профілю)',
