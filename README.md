@@ -110,6 +110,14 @@ English uses the built-in source strings and does not need a separate language f
 
 This is a personal project. Issues are welcome, and pull requests are accepted — please open them against the `dev` branch.
 
+## Releases
+
+A GitHub Actions workflow (`.github/workflows/release.yml`) automates the release process. Before triggering it:
+
+1. Update the version in **`latest-version.txt`** (plain version number, e.g. `0.7.4`).
+2. Update the **`customModuleVersion()`** return value in `SpTreeExplorer.php` to the same version.
+3. Run the **Create Release** workflow from the Actions tab — it builds a ZIP archive and creates a tagged GitHub release with auto-generated notes from merged pull requests.
+
 ## License
 
 [GPL-3.0-or-later](https://www.gnu.org/licenses/gpl-3.0.html) — same license family as webtrees itself.
